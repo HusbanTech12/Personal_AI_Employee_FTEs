@@ -76,6 +76,86 @@ Save changes
 
 ---
 
+## Execution Lifecycle
+
+### Phase 1: Task Selection
+
+```
+Scan /Needs_Action
+↓
+Read frontmatter from all .md files
+↓
+Sort by: priority (DESC), created (ASC)
+↓
+Select highest-priority oldest task
+```
+
+**Selection Criteria:**
+- Only process `status: needs_action` tasks
+- Priority order: `urgent` > `high` > `standard` > `low`
+- Tie-breaker: Oldest `created` timestamp first
+
+### Phase 2: Task Execution
+
+```
+Read task Description and Expected Output
+↓
+Execute required work
+↓
+Generate deliverables
+↓
+Verify output quality
+```
+
+**Execution Rules:**
+- Follow task specifications exactly
+- Flag ambiguities with `[REVIEW_REQUIRED]`
+- Document decisions in task Notes section
+
+### Phase 3: Completion Verification
+
+```
+Check all Expected Output delivered?
+↓
+Check activity log entry created?
+↓
+Check dashboard metrics updated?
+↓
+All YES → Mark complete
+Any NO → Return to queue with notes
+```
+
+### Phase 4: Task Closure
+
+```
+Update frontmatter: status → done
+↓
+Write activity log entry
+↓
+Move file to /Done/
+↓
+Move metadata file to /Done/
+↓
+Update dashboard: increment completed count
+↓
+Remove from pending tasks list
+```
+
+---
+
+## Priority Handling
+
+| Priority | Marker | Response |
+|----------|--------|----------|
+| `urgent` | `[URGENT]` | Process immediately |
+| `high` | `[HIGH]` | Next in queue |
+| `standard` | *(default)* | Normal queue order |
+| `low` | `[LOW]` | Process after higher priorities |
+
+**Priority Detection Order:** Frontmatter field → Content markers → Keywords → Default
+
+---
+
 ## Output
 
 | Destination | Format | Content |

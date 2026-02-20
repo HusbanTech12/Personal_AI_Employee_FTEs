@@ -40,6 +40,19 @@ Inbox → Needs_Action → Done
 4. Upon completion, move to `/Done`
 5. Update Dashboard.md with completion status
 
+**Workflow Rules:**
+
+| Transition | When | Who | Completion Criteria |
+|------------|------|-----|---------------------|
+| Inbox → Needs_Action | New task received | Filesystem watcher | Task template populated, priority assigned |
+| Needs_Action → Done | Task fully executed | AI Employee | Expected output delivered, logged in activity_log.md |
+
+**Completion Criteria:**
+- All expected outputs are generated and verified
+- Activity log entry created with timestamp and status
+- Task status updated to `done`
+- Related dashboard metrics updated (if applicable)
+
 ### 4. Sensitive Work Handling
 
 Flag sensitive work using these markers:

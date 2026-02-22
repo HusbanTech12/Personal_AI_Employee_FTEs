@@ -117,39 +117,138 @@ Ready for AI processing
 
 ## AI Task Lifecycle
 
-### Workflow: Inbox → Needs_Action → Done
+### Silver Tier Workflow: Inbox → Needs_Action → Skill Selection → Execution → Done
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Task Lifecycle                           │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         SILVER TIER TASK LIFECYCLE                          │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-  1. INCOMING              2. PROCESSING           3. COMPLETE
-  ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-  │   /Inbox    │         │Needs_Action │         │    /Done    │
-  │             │         │             │         │             │
-  │  [file.md]  │──── ───→│  [file.md]  │──── ───→│  [file.md]  │
-  │             │         │  [file.meta]│         │             │
-  └─────────────┘         └──────┬──────┘         └─────────────┘
-                                 │
-                                 ▼
-                        ┌─────────────────┐
-                        │  Qwen AI Reads  │
-                        │  Processes Task │
-                        │  Updates Status │
-                        └─────────────────┘
+  1. INCOMING        2. QUEUED          3. SKILL ROUTING      4. EXECUTION
+  ┌───────────┐     ┌───────────┐      ┌─────────────────┐   ┌─────────────┐
+  │  /Inbox   │ ──→ │Needs_Action│ ──→ │ task_processor  │ → │  Selected   │
+  │           │     │           │      │  Skill Router   │   │   Skill     │
+  │ [file.md] │     │ [file.md] │      │  - Classify     │   │  (coding/   │
+  └───────────┘     └───────────┘      │  - Route        │   │  research/  │
+                                        │  - Dispatch     │   │  docs/      │
+                                        └─────────────────┘   │  planning)  │
+                                                              └──────┬──────┘
+                                                                     │
+                        5. COMPLETE                                  │
+                        ┌───────────┐                                │
+                        │   /Done   │ ←───────────────────────────────┘
+                        │           │
+                        │ [file.md] │  status: done
+                        └───────────┘
 ```
 
-### How Qwen Processes Tasks
+### Detailed Flow
 
-1. **Read** `Dashboard.md` → Check `Pending_Tasks` section
-2. **Navigate** to `/Needs_Action/` → Find task files
-3. **Read** task content + metadata (`.meta.md`)
-4. **Process** according to `Company_Handbook.md` rules
-5. **Execute** skill logic from `Skills/task_processor.SKILL.md`
-6. **Update** `Dashboard.md` with progress
-7. **Move** completed task to `/Done/`
-8. **Log** completion in `/Logs/`
+#### Phase 1: Inbox (Incoming)
+```
+User drops task file in /Inbox/
+        ↓
+filesystem_watcher.py detects file creation
+        ↓
+Validates file (not .tmp, not locked)
+        ↓
+Copies to /Needs_Action/ with metadata
+        ↓
+Updates Dashboard.md pending list
+        ↓
+Logs to activity_log.md
+```
+
+#### Phase 2: Needs_Action (Queued)
+```
+task_executor.py scans /Needs_Action/
+        ↓
+Reads frontmatter: status = 'needs_action'
+        ↓
+Passes task to task_processor skill router
+```
+
+#### Phase 3: Skill Selection (Routing)
+```
+task_processor.SKILL.md analyzes task:
+        ↓
+1. Extract keywords from title & content
+2. Score against category matrix:
+   - coding: code, API, function, build, implement
+   - research: analyze, compare, investigate, explore
+   - documentation: write, document, README, guide
+   - planning: plan, design, roadmap, organize
+        ↓
+3. Select highest-scoring skill
+        ↓
+4. Load skill definition from /Skills/{skill}.SKILL.md
+```
+
+#### Phase 4: Execution (Specialized Skill)
+```
+Selected skill executes:
+        ↓
+┌─────────────┬─────────────────────────────────────────────────┐
+│   Skill     │              Execution Logic                    │
+├─────────────┼─────────────────────────────────────────────────┤
+│  planning   │ Break down → Timeline → Dependencies → Actions  │
+│  coding     │ Implement → Test → Document → Verify            │
+│  research   │ Gather → Analyze → Compare → Recommend          │
+│  docs       │ Outline → Write → Example → Review              │
+└─────────────┴─────────────────────────────────────────────────┘
+        ↓
+Generate deliverables per skill definition
+```
+
+#### Phase 5: Done (Complete)
+```
+Verify completion criteria met
+        ↓
+Update frontmatter: status → done
+        ↓
+Write activity log entry
+        ↓
+Move file to /Done/
+        ↓
+Update Dashboard metrics
+        ↓
+Task complete!
+```
+
+### How Qwen AI Processes Tasks (Silver Tier)
+
+1. **Read** `Skills/task_processor.SKILL.md` → Understand routing logic
+2. **Scan** `/Needs_Action/` → Find pending tasks
+3. **Analyze** task content → Classify into category
+4. **Load** appropriate skill (`planner`, `coding`, `research`, `documentation`)
+5. **Execute** skill-specific logic per skill definition
+6. **Generate** deliverables (code, plan, report, or docs)
+7. **Update** `Dashboard.md` with progress
+8. **Move** completed task to `/Done/`
+9. **Log** completion in `/Logs/`
+
+---
+
+## Skills System
+
+### Available Skills (Silver Tier)
+
+| Skill | File | Purpose |
+|-------|------|---------|
+| **Task Processor** (Router) | `task_processor.SKILL.md` | Classifies and routes tasks to appropriate skills |
+| **Planner** | `planner.SKILL.md` | Task breakdown, roadmaps, project planning |
+| **Coding** | `coding.SKILL.md` | Code generation, refactoring, debugging, testing |
+| **Research** | `research.SKILL.md` | Information gathering, analysis, comparisons |
+| **Documentation** | `documentation.SKILL.md` | README, guides, tutorials, API docs |
+
+### Skill Selection Matrix
+
+| If task contains... | Selected Skill |
+|---------------------|----------------|
+| `code`, `API`, `function`, `build`, `implement`, `test`, `.py`, `.js` | `coding` |
+| `research`, `analyze`, `compare`, `investigate`, `explore` | `research` |
+| `document`, `write`, `README`, `guide`, `tutorial` | `documentation` |
+| `plan`, `design`, `roadmap`, `organize`, `project` | `planner` |
 
 ---
 

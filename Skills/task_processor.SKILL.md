@@ -1,19 +1,50 @@
-# Skill: Task Processor
+# Skill: Task Processor (Skill Router)
 
 ## Metadata
 
 | Field | Value |
 |-------|-------|
 | **Skill ID** | `task_processor` |
-| **Tier** | Bronze |
-| **Version** | 1.0 |
+| **Tier** | Silver |
+| **Version** | 2.0 |
 | **Status** | Active |
+| **Type** | Router/Orchestrator |
 
 ---
 
 ## Purpose
 
-Process incoming tasks from the `/Inbox` folder, classify them, and manage their movement through the workflow pipeline.
+Act as the central **Skill Router** for the AI Employee system. This skill:
+
+1. **Reads** task content from incoming task files
+2. **Classifies** tasks into appropriate categories
+3. **Selects** the most suitable specialized skill
+4. **Routes** execution to the selected skill
+5. **Orchestrates** the complete workflow from Inbox to Done
+
+---
+
+## Task Classification System
+
+### Category Detection Matrix
+
+| Category | Keywords & Indicators | Skill Router |
+|----------|----------------------|--------------|
+| `coding` | `code`, `function`, `API`, `script`, `implement`, `build`, `develop`, `refactor`, `debug`, `test`, `.py`, `.js`, `.sh` | `coding.SKILL.md` |
+| `research` | `research`, `analyze`, `investigate`, `explore`, `compare`, `evaluate`, `study`, `find`, `search`, `review` | `research.SKILL.md` |
+| `documentation` | `document`, `write`, `README`, `guide`, `tutorial`, `explain`, `describe`, `update docs`, `.md` | `documentation.SKILL.md` |
+| `planning` | `plan`, `strategy`, `roadmap`, `design`, `architecture`, `outline`, `structure`, `organize`, `task`, `project` | `planner.SKILL.md` |
+
+### Priority Detection
+
+| Priority | Markers | Response Time |
+|----------|---------|---------------|
+| `urgent` | `[URGENT]`, `ASAP`, `critical`, `blocking`, `emergency` | Immediate |
+| `high` | `[HIGH]`, `important`, `deadline`, `priority` | Next cycle |
+| `standard` | *(default)* | Queue order |
+| `low` | `[LOW]`, `optional`, `nice-to-have`, `when possible` | After higher |
+
+**Detection Order:** Frontmatter → Content markers → Keywords → Default
 
 ---
 
@@ -21,138 +52,254 @@ Process incoming tasks from the `/Inbox` folder, classify them, and manage their
 
 | Source | Format | Trigger |
 |--------|--------|---------|
-| `/Inbox/` | Any file type | File creation event |
+| `/Needs_Action/` | `.md` files with frontmatter | Task queue scan |
 
-**Expected Input:**
-- Text files (`.md`, `.txt`)
-- Documents (`.pdf`, `.docx`)
-- Data files (`.json`, `.csv`)
+**Expected Task Structure:**
+```markdown
+---
+title: Task Name
+status: needs_action
+priority: standard
+created: YYYY-MM-DD HH:MM:SS
+skill: task_processor
+---
+
+Task description and requirements...
+```
 
 ---
 
-## Process
+## Process: Skill Routing Pipeline
 
-### Step 1: Detection
 ```
-Watch /Inbox for new files
-↓
-Detect file creation event
-↓
-Validate file is not temporary (.tmp, .part)
+┌─────────────────────────────────────────────────────────────────┐
+│                    SKILL ROUTING PIPELINE                       │
+└─────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────┐
+    │   INBOX     │  ← New task arrives
+    └──────┬──────┘
+           │
+           ▼
+    ┌─────────────┐
+    │ Needs_Action│  ← Task enters queue
+    └──────┬──────┘
+           │
+           ▼
+    ┌─────────────────────────────────────────┐
+    │  SKILL SELECTION (task_processor)       │
+    │  ┌─────────────────────────────────┐    │
+    │  │ 1. Read task content            │    │
+    │  │ 2. Extract keywords             │    │
+    │  │ 3. Match against category matrix│    │
+    │  │ 4. Select target skill          │    │
+    │  └─────────────────────────────────┘    │
+    └──────────────────┬──────────────────────┘
+                       │
+           ┌───────────┼───────────┐
+           │           │           │
+           ▼           ▼           ▼
+    ┌──────────┐ ┌──────────┐ ┌──────────────┐
+    │  coding  │ │ research │ │ documentation│
+    │  SKILL   │ │  SKILL   │ │    SKILL     │
+    └──────────┘ └──────────┘ └──────────────┘
+           │           │           │
+           └───────────┼───────────┘
+                       │
+                       ▼
+    ┌─────────────────────────────────────────┐
+    │         EXECUTION                       │
+    │  - Run selected skill logic             │
+    │  - Generate deliverables                │
+    │  - Verify output quality                │
+    └──────────────────┬──────────────────────┘
+                       │
+                       ▼
+    ┌─────────────┐
+    │    DONE     │  ← Task completed & archived
+    └─────────────┘
 ```
 
-### Step 2: Classification
-```
-Read file content
-↓
-Analyze for keywords/priority markers
-↓
-Assign category: URGENT, STANDARD, REVIEW, ARCHIVE
-↓
-Flag if [SENSITIVE] content detected
+---
+
+## Skill Selection Algorithm
+
+### Step 1: Content Analysis
+
+```python
+def analyze_task(task_content: str) -> dict:
+    """Extract classification signals from task."""
+    
+    # Extract frontmatter metadata
+    frontmatter = parse_frontmatter(task_content)
+    
+    # Extract body content
+    body = extract_body(task_content)
+    
+    # Build keyword frequency map
+    keywords = extract_keywords(body)
+    
+    return {
+        'frontmatter': frontmatter,
+        'keywords': keywords,
+        'body_length': len(body),
+        'has_code_blocks': '```' in body,
+        'has_checklists': '- [ ]' in body
+    }
 ```
 
-### Step 3: Movement
-```
-Copy file to /Needs_Action/
-↓
-Preserve original in /Inbox (safety)
-↓
-Generate metadata markdown
-↓
-Log the operation
+### Step 2: Category Scoring
+
+```python
+def score_categories(analysis: dict) -> dict:
+    """Score each category based on analysis."""
+    
+    scores = {
+        'coding': 0,
+        'research': 0,
+        'documentation': 0,
+        'planning': 0
+    }
+    
+    # Check explicit skill hint
+    if 'skill' in analysis['frontmatter']:
+        hinted_skill = analysis['frontmatter']['skill']
+        if hinted_skill in scores:
+            scores[hinted_skill] += 10
+    
+    # Score based on keywords
+    for keyword, category in KEYWORD_MAP.items():
+        if keyword in analysis['keywords']:
+            scores[category] += analysis['keywords'][keyword]
+    
+    # Boost coding if code blocks present
+    if analysis['has_code_blocks']:
+        scores['coding'] += 5
+    
+    # Boost documentation if checklists present
+    if analysis['has_checklists']:
+        scores['documentation'] += 3
+    
+    return scores
 ```
 
-### Step 4: Dashboard Update
-```
-Read Dashboard.md
-↓
-Add entry to Pending_Tasks section
-↓
-Update Timestamp
-↓
-Save changes
+### Step 3: Skill Selection
+
+```python
+def select_skill(scores: dict) -> str:
+    """Select the highest-scoring category."""
+    
+    # Get highest score
+    max_score = max(scores.values())
+    
+    if max_score == 0:
+        return 'planning'  # Default fallback
+    
+    # Return category with highest score
+    for category, score in scores.items():
+        if score == max_score:
+            return category
 ```
 
 ---
 
 ## Execution Lifecycle
 
-### Phase 1: Task Selection
+### Phase 1: Task Acquisition
 
 ```
-Scan /Needs_Action
+Scan /Needs_Action for pending tasks
 ↓
-Read frontmatter from all .md files
+Read frontmatter: status = 'needs_action'
 ↓
-Sort by: priority (DESC), created (ASC)
+Load full task content
 ↓
-Select highest-priority oldest task
+Lock task to prevent duplicate processing
 ```
 
-**Selection Criteria:**
-- Only process `status: needs_action` tasks
-- Priority order: `urgent` > `high` > `standard` > `low`
-- Tie-breaker: Oldest `created` timestamp first
-
-### Phase 2: Task Execution
+### Phase 2: Skill Routing
 
 ```
-Read task Description and Expected Output
+Analyze task content
 ↓
-Execute required work
+Score against all categories
 ↓
-Generate deliverables
+Select highest-matching skill
 ↓
-Verify output quality
+Load skill definition from /Skills/{skill}.SKILL.md
+↓
+Log routing decision
 ```
 
-**Execution Rules:**
-- Follow task specifications exactly
-- Flag ambiguities with `[REVIEW_REQUIRED]`
-- Document decisions in task Notes section
-
-### Phase 3: Completion Verification
+### Phase 3: Delegated Execution
 
 ```
-Check all Expected Output delivered?
+Invoke selected skill's execution logic
 ↓
-Check activity log entry created?
+Monitor progress
 ↓
-Check dashboard metrics updated?
+Handle errors per skill definition
 ↓
-All YES → Mark complete
-Any NO → Return to queue with notes
+Collect output/deliverables
 ```
 
-### Phase 4: Task Closure
+### Phase 4: Completion & Closure
 
 ```
-Update frontmatter: status → done
+Verify all deliverables generated
+↓
+Update task frontmatter: status → done
 ↓
 Write activity log entry
 ↓
-Move file to /Done/
+Move task to /Done/
 ↓
-Move metadata file to /Done/
+Update Dashboard metrics
 ↓
-Update dashboard: increment completed count
-↓
-Remove from pending tasks list
+Release task lock
 ```
 
 ---
 
-## Priority Handling
+## Available Skills
 
-| Priority | Marker | Response |
-|----------|--------|----------|
-| `urgent` | `[URGENT]` | Process immediately |
-| `high` | `[HIGH]` | Next in queue |
-| `standard` | *(default)* | Normal queue order |
-| `low` | `[LOW]` | Process after higher priorities |
+| Skill ID | File | Purpose |
+|----------|------|---------|
+| `planner` | `planner.SKILL.md` | Task breakdown, roadmaps, project planning |
+| `coding` | `coding.SKILL.md` | Code generation, refactoring, debugging |
+| `research` | `research.SKILL.md` | Information gathering, analysis, comparison |
+| `documentation` | `documentation.SKILL.md` | Writing guides, READMEs, technical docs |
 
-**Priority Detection Order:** Frontmatter field → Content markers → Keywords → Default
+---
+
+## Routing Decision Log
+
+Every routing decision is logged:
+
+```
+timestamp            | task              | selected_skill | confidence
+---------------------|-------------------|----------------|------------
+2026-02-22 20:45:00  | build_api.md      | coding         | high
+2026-02-22 20:46:00  | research_ml.md    | research       | high
+2026-02-22 20:47:00  | update_readme.md  | documentation  | medium
+2026-02-22 20:48:00  | project_plan.md   | planning       | high
+```
+
+**Confidence Levels:**
+- `high` - Clear keyword match or explicit skill hint
+- `medium` - Moderate keyword overlap
+- `low` - Weak signals, used default fallback
+
+---
+
+## Error Handling
+
+| Error | Handling Strategy |
+|-------|-------------------|
+| No matching skill | Default to `planning`, flag `[REVIEW_REQUIRED]` |
+| Skill file missing | Log error, fallback to `task_processor` base logic |
+| Execution failure | Retry once, then flag `[BLOCKED]` with error details |
+| Circular routing | Detect loop, force `planning` skill |
 
 ---
 
@@ -160,79 +307,58 @@ Remove from pending tasks list
 
 | Destination | Format | Content |
 |-------------|--------|---------|
-| `/Needs_Action/` | Original file | Task file ready for processing |
-| `/Needs_Action/` | `.meta.md` | Metadata file |
-| `/Logs/` | `.md` | Activity log entry |
-| `Dashboard.md` | Updated section | New pending task listed |
-
-### Metadata File Format
-
-```markdown
-# Task Metadata
-
-- **Original File:** `{filename}`
-- **Received:** `{timestamp}`
-- **Category:** `{URGENT|STANDARD|REVIEW|ARCHIVE}`
-- **Status:** `Pending`
-- **Sensitive:** `{true|false}`
-- **Source:** `/Inbox/{filename}`
-```
-
----
-
-## Folder Movement Logic
-
-```
-┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
-│   /Inbox    │ ──→ │  /Needs_Action   │ ──→ │   /Done     │
-│  (Watch)    │     │   (Process)      │     │ (Complete)  │
-└─────────────┘     └──────────────────┘     └─────────────┘
-       │                    │                      │
-       │                    │                      │
-       ▼                    ▼                      ▼
-   Read-only           Read/Write            Write only
-   (Original           (Active               (Final
-    preserved)          Queue)                Storage)
-```
-
-**Movement Rules:**
-1. **Copy** from Inbox → Needs_Action (never move initially)
-2. **Move** from Needs_Action → Done (after completion)
-3. **Never delete** from Inbox (user manages cleanup)
-4. **Always log** each movement operation
-
----
-
-## Error Conditions
-
-| Error | Handling |
-|-------|----------|
-| File locked/in-use | Retry 3x, then log error |
-| Invalid characters in name | Sanitize filename, log warning |
-| Destination full/no space | Halt, flag critical error |
-| Dashboard locked | Queue update, retry on next cycle |
+| `/Done/` | Original task file | Completed task with updated frontmatter |
+| `/Logs/` | `.log` | Routing decision + execution summary |
+| `Dashboard.md` | Updated metrics | Completed count, last activity |
+| `activity_log.md` | Log entry | `completed | {filename} | {skill}` |
 
 ---
 
 ## Integration Points
 
-- **Filesystem Watcher:** Triggers skill execution
-- **Dashboard.md:** Receives task updates
-- **Logs/:** Records all operations
-- **Company_Handbook.md:** Provides classification rules
+- **filesystem_watcher.py**: Moves tasks from Inbox → Needs_Action
+- **task_executor.py**: Executes the skill routing logic
+- **Dashboard.md**: Receives task status updates
+- **Skills/*.SKILL.md**: Specialized skill definitions
 
 ---
 
-## Example Execution
+## Example Routing Decision
 
-**Input:** `/Inbox/meeting_notes.md`
+**Input Task:** `/Needs_Action/build_api.md`
 
-**Process:**
-1. File detected at 2026-02-19 10:30:00
-2. Content analyzed → Category: STANDARD
-3. Copied to `/Needs_Action/meeting_notes.md`
-4. Metadata created: `/Needs_Action/meeting_notes.meta.md`
-5. Dashboard updated with new pending task
-6. Log entry written: `/Logs/activity_2026-02-19.md`
+```markdown
+---
+title: Build REST API
+status: needs_action
+priority: high
+---
 
-**Output:** Task ready for AI processing in Needs_Action queue.
+Implement a REST API endpoint for user registration.
+- Create POST /api/users endpoint
+- Add input validation
+- Write unit tests
+```
+
+**Routing Analysis:**
+- Keywords detected: `implement` (+2 coding), `API` (+3 coding), `endpoint` (+2 coding), `tests` (+2 coding)
+- Code-related terms: `POST`, `/api/`
+- Explicit markers: None
+
+**Decision:**
+```
+Selected Skill: coding
+Confidence: high (score: 9)
+Runner-up: planning (score: 0)
+```
+
+**Execution:** Routes to `coding.SKILL.md` for implementation.
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-02-19 | Initial Bronze Tier implementation |
+| 2.0 | 2026-02-22 | Silver Tier: Added skill routing, classification matrix |

@@ -23,7 +23,9 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from threading import Thread, Event
+from threading import Thread, Event, Lock
+from enum import Enum
+from typing import Dict, Optional
 
 # =============================================================================
 # Configuration
@@ -48,6 +50,17 @@ IGNORED_EXTENSIONS = {'.tmp', '.part', '.swp', '.bak', '.crdownload'}
 # Logging configuration
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+# =============================================================================
+# Task Status Enum
+# =============================================================================
+
+class TaskStatus(Enum):
+    """Task lifecycle states."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+
 
 # =============================================================================
 # Logging Setup
@@ -88,7 +101,47 @@ class TaskCompletionHandler:
         self.needs_action_dir = needs_action_dir
         self.done_dir = done_dir
         self.logs_dir = logs_dir
-        self.processing_lock = set()
+        self.task_queue: Dict[str, TaskStatus] = {}
+        self.queue_lock = Lock()
+
+    def scan_for_tasks(self) -> list:
+        """Scan Needs_Action directory for pending tasks."""
+        pending_tasks = []
+
+        if not self.needs_action_dir.exists():
+            return pending_tasks
+
+        try:
+            for file_path in self.needs_action_dir.iterdir():
+                if file_path.is_file() and file_path.suffix.lower() in VALID_EXTENSIONS:
+                    filename = file_path.name
+                    with self.queue_lock:
+                        if filename not in self.task_queue:
+                            self.task_queue[filename] = TaskStatus.PENDING
+                            pending_tasks.append(file_path)
+                            logger.info(f"New task detected: {filename}")
+        except Exception as e:
+            logger.error(f"Error scanning directory: {str(e)}")
+
+        return pending_tasks
+
+    def get_next_pending_task(self) -> Optional[Path]:
+        """Get the next pending task from the queue."""
+        with self.queue_lock:
+            for filename, status in self.task_queue.items():
+                if status == TaskStatus.PENDING:
+                    file_path = self.needs_action_dir / filename
+                    if file_path.exists():
+                        self.task_queue[filename] = TaskStatus.RUNNING
+                        return file_path
+        return None
+
+    def mark_task_completed(self, filename: str):
+        """Mark a task as completed in the queue."""
+        with self.queue_lock:
+            if filename in self.task_queue:
+                self.task_queue[filename] = TaskStatus.COMPLETED
+                logger.info(f"Task marked completed: {filename}")
 
     def check_task(self, file_path: Path):
         """Check if a task is completed and should be archived."""
@@ -103,23 +156,19 @@ class TaskCompletionHandler:
             logger.debug(f"Ignoring non-markdown file: {file_path.name}")
             return
 
-        if file_path.name in self.processing_lock:
-            logger.debug(f"File already being processed: {file_path.name}")
-            return
-
         self.process_completed_task(file_path)
 
     def process_completed_task(self, file_path: Path):
         """Process a task that may be completed."""
-        self.processing_lock.add(file_path.name)
+        filename = file_path.name
 
         try:
             # Check if task is marked as completed
             if not self.is_task_completed(file_path):
                 return
 
-            print(f"\n✅ Completed task detected: {file_path.name}")
-            logger.info(f"Completed task detected: {file_path.name}")
+            print(f"\n✅ Completed task detected: {filename}")
+            logger.info(f"Completed task detected: {filename}")
 
             # Wait for file to be fully written
             retries = 5
@@ -135,36 +184,38 @@ class TaskCompletionHandler:
                         raise
 
             if not file_path.exists():
-                logger.warning(f"File no longer exists: {file_path.name}")
-                print(f"❌ File no longer exists: {file_path.name}")
+                logger.warning(f"File no longer exists: {filename}")
+                print(f"❌ File no longer exists: {filename}")
+                self.mark_task_completed(filename)
                 return
 
             # Move to Done folder
             success = self.move_to_done(file_path)
 
             if not success:
+                self.mark_task_completed(filename)
                 return
 
-            print(f"✅ Task archived to Done: {file_path.name}")
+            print(f"✅ Task archived to Done: {filename}")
 
             # Write activity log entry
-            self.write_activity_log(file_path.name)
+            self.write_activity_log(filename)
             print(f"✅ Log updated: activity_log.md")
 
             # Update Dashboard
-            self.update_dashboard(file_path.name)
+            self.update_dashboard(filename)
             print(f"✅ Dashboard updated")
 
-            print(f"✅ Successfully archived: {file_path.name}\n")
-            logger.info(f"Successfully archived: {file_path.name}")
+            print(f"✅ Successfully archived: {filename}\n")
+            logger.info(f"Successfully archived: {filename}")
 
         except Exception as e:
-            print(f"❌ Error processing {file_path.name}: {str(e)}")
-            logger.error(f"Error processing {file_path.name}: {str(e)}")
-            self.log_error(file_path.name, str(e))
+            print(f"❌ Error processing {filename}: {str(e)}")
+            logger.error(f"Error processing {filename}: {str(e)}")
+            self.log_error(filename, str(e))
 
         finally:
-            self.processing_lock.discard(file_path.name)
+            self.mark_task_completed(filename)
 
     def is_task_completed(self, file_path: Path) -> bool:
         """Check if task has status: completed in frontmatter."""
@@ -367,12 +418,13 @@ class PollingFileWatcher:
     Polls the directory at regular intervals to detect completed tasks.
     """
 
-    def __init__(self, watch_dir: Path, handler: TaskCompletionHandler, interval: float = 2.0):
+    def __init__(self, watch_dir: Path, handler: TaskCompletionHandler, interval: float = 5.0):
         self.watch_dir = watch_dir
         self.handler = handler
         self.interval = interval
         self.stop_event = Event()
         self.thread = None
+        self.last_task_count = 0
 
     def start(self):
         """Start the polling watcher."""
@@ -388,20 +440,38 @@ class PollingFileWatcher:
         logger.info("Executor polling stopped")
 
     def _poll_loop(self):
-        """Main polling loop."""
+        """Main polling loop with task queue management."""
         while not self.stop_event.is_set():
             try:
-                print("✅ Checking tasks...")
+                # Scan for new tasks
+                pending_tasks = self.handler.scan_for_tasks()
+                current_task_count = len(self.handler.task_queue)
 
-                if self.watch_dir.exists():
-                    for file_path in self.watch_dir.iterdir():
-                        if file_path.is_file() and file_path.suffix.lower() == '.md':
-                            self.handler.check_task(file_path)
+                # Log only when task state changes
+                if current_task_count != self.last_task_count:
+                    logger.info(f"Task queue updated: {current_task_count} tasks tracked")
+                    self.last_task_count = current_task_count
+
+                if not pending_tasks:
+                    # No new tasks, wait before next check
+                    self.stop_event.wait(self.interval)
+                    continue
+
+                # Process pending tasks
+                task_processed = False
+                for file_path in pending_tasks:
+                    if self.stop_event.is_set():
+                        break
+                    self.handler.check_task(file_path)
+                    task_processed = True
+
+                # If tasks were processed, wait before next scan
+                if task_processed:
+                    self.stop_event.wait(self.interval)
 
             except Exception as e:
                 logger.error(f"Polling error: {str(e)}")
-
-            self.stop_event.wait(self.interval)
+                self.stop_event.wait(self.interval)
 
 
 # =============================================================================
@@ -423,17 +493,19 @@ def main():
     print(f"Base Directory: {BASE_DIR}")
     print(f"Monitoring: {NEEDS_ACTION_DIR}")
     print("Watching for: status: completed")
+    print("Status system: pending → running → completed")
     print("Press Ctrl+C to stop")
     print("=" * 60)
 
     ensure_directories()
 
     handler = TaskCompletionHandler(NEEDS_ACTION_DIR, DONE_DIR, LOGS_DIR)
-    watcher = PollingFileWatcher(NEEDS_ACTION_DIR, handler, interval=2.0)
+    watcher = PollingFileWatcher(NEEDS_ACTION_DIR, handler, interval=5.0)
 
     watcher.start()
     logger.info("Task executor started successfully")
-    print("\n✅ Monitoring Needs_Action for completed tasks...\n")
+    print("\n✅ Monitoring Needs_Action for completed tasks...")
+    print("⏸️  Idle mode: waiting for new tasks\n")
 
     try:
         while True:

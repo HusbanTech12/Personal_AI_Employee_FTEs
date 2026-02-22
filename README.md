@@ -188,7 +188,33 @@ Ensure these folders exist in `AI_Employee_Vault/`:
 
 ## Run Instructions
 
-### Start the Filesystem Watcher
+### Quick Start (Recommended)
+
+**Start All Agents:**
+
+```bash
+bash run_agents.sh
+```
+
+This single command will:
+- Activate the virtual environment
+- Start the filesystem watcher (monitors Inbox/)
+- Start the task executor (processes Needs_Action/)
+- Run both agents concurrently
+- Log all activity to `Logs/agents.log`
+- Handle graceful shutdown on Ctrl+C
+
+**Stop All Agents:**
+
+Press `Ctrl+C` in the terminal to gracefully shutdown both agents.
+
+---
+
+### Manual Start (Individual Components)
+
+If you prefer to run components separately:
+
+**Start the Filesystem Watcher:**
 
 **Windows (PowerShell):**
 ```powershell
@@ -293,11 +319,25 @@ Your content here
 
 ## Version Info
 
-- **Tier:** Bronze
-- **Version:** 1.0
+- **Version:** 1.1
+- **Tier:** Silver
 - **Created:** 2026-02-19
+- **Updated:** 2026-02-22
 - **Architecture:** Local-First
-- **Platform:** Cross-platform (Windows/Linux/Mac)
+- **Platform:** Cross-platform (Windows/Linux/Mac/WSL)
+
+---
+
+## Silver Tier Features
+
+| Feature | Description |
+|---------|-------------|
+| **Concurrent Agents** | Filesystem watcher + task executor run simultaneously |
+| **Auto Startup** | Single `run_agents.sh` script starts all components |
+| **Centralized Logging** | All agent output logged to `Logs/agents.log` |
+| **Graceful Shutdown** | Clean termination with Ctrl+C |
+| **Process Monitoring** | Auto-restart if an agent crashes |
+| **WSL Compatible** | Works on Windows Subsystem for Linux |
 
 ---
 

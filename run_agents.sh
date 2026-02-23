@@ -1,9 +1,14 @@
 #!/bin/bash
 #
-# AI Employee Vault - Agent Startup Script (Silver Tier)
+# AI Employee Vault - Gold Tier Multi-Agent Startup Script
 #
-# Starts both filesystem_watcher.py and task_executor.py concurrently
-# with proper venv activation, logging, and graceful shutdown handling.
+# Starts all Gold Tier agents concurrently:
+# - filesystem_watcher.py (Inbox monitoring)
+# - task_executor.py (Legacy executor)
+# - planner_agent.py (Task analysis & planning)
+# - manager_agent.py (Skill routing & orchestration)
+# - validator_agent.py (Completion verification)
+# - memory_agent.py (Logging & history)
 #
 # Usage: bash run_agents.sh
 # Stop:  Press Ctrl+C to gracefully shutdown all agents
@@ -18,10 +23,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/venv"
 LOGS_DIR="$SCRIPT_DIR/Logs"
+AGENTS_DIR="$SCRIPT_DIR/Agents"
 AGENTS_LOG="$LOGS_DIR/agents.log"
 
+# Agent scripts
 WATCHER_SCRIPT="$SCRIPT_DIR/filesystem_watcher.py"
 EXECUTOR_SCRIPT="$SCRIPT_DIR/task_executor.py"
+PLANNER_SCRIPT="$AGENTS_DIR/planner_agent.py"
+MANAGER_SCRIPT="$AGENTS_DIR/manager_agent.py"
+VALIDATOR_SCRIPT="$AGENTS_DIR/validator_agent.py"
+MEMORY_SCRIPT="$AGENTS_DIR/memory_agent.py"
 
 # =============================================================================
 # Colors for Output
@@ -32,6 +43,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # =============================================================================
@@ -59,6 +71,10 @@ log_error() {
     log "${RED}[ERROR]${NC} $1"
 }
 
+log_agent() {
+    log "${MAGENTA}[AGENT]${NC} $1"
+}
+
 # =============================================================================
 # Cleanup and Shutdown Handlers
 # =============================================================================
@@ -67,20 +83,13 @@ cleanup() {
     echo ""
     log_info "Initiating graceful shutdown..."
     
-    # Kill background processes
-    if [ -n "$WATCHER_PID" ] && kill -0 "$WATCHER_PID" 2>/dev/null; then
-        log_info "Stopping filesystem watcher (PID: $WATCHER_PID)..."
-        kill -TERM "$WATCHER_PID" 2>/dev/null || true
-        wait "$WATCHER_PID" 2>/dev/null || true
-        log_success "Filesystem watcher stopped"
-    fi
-    
-    if [ -n "$EXECUTOR_PID" ] && kill -0 "$EXECUTOR_PID" 2>/dev/null; then
-        log_info "Stopping task executor (PID: $EXECUTOR_PID)..."
-        kill -TERM "$EXECUTOR_PID" 2>/dev/null || true
-        wait "$EXECUTOR_PID" 2>/dev/null || true
-        log_success "Task executor stopped"
-    fi
+    # Kill all agent processes
+    for pid in "$WATCHER_PID" "$EXECUTOR_PID" "$PLANNER_PID" "$MANAGER_PID" "$VALIDATOR_PID" "$MEMORY_PID"; do
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
     
     log_success "All agents stopped. Goodbye!"
     exit 0
@@ -116,18 +125,23 @@ check_prerequisites() {
     fi
     log_success "Virtual environment verified"
     
-    # Check scripts exist
-    if [ ! -f "$WATCHER_SCRIPT" ]; then
-        log_error "Filesystem watcher not found: $WATCHER_SCRIPT"
-        exit 1
-    fi
-    log_success "Filesystem watcher script found"
+    # Check required scripts exist
+    for script in "$WATCHER_SCRIPT" "$EXECUTOR_SCRIPT" "$PLANNER_SCRIPT" "$MANAGER_SCRIPT" "$VALIDATOR_SCRIPT" "$MEMORY_SCRIPT"; do
+        if [ ! -f "$script" ]; then
+            log_error "Script not found: $script"
+            exit 1
+        fi
+    done
+    log_success "All agent scripts found"
     
-    if [ ! -f "$EXECUTOR_SCRIPT" ]; then
-        log_error "Task executor not found: $EXECUTOR_SCRIPT"
-        exit 1
-    fi
-    log_success "Task executor script found"
+    # Check skill definitions
+    SKILLS_DIR="$SCRIPT_DIR/Skills"
+    for skill in task_processor coding research documentation planner; do
+        if [ ! -f "$SKILLS_DIR/${skill}.SKILL.md" ]; then
+            log_warning "Skill definition missing: ${skill}.SKILL.md"
+        fi
+    done
+    log_success "Skill definitions verified"
     
     # Ensure logs directory exists
     mkdir -p "$LOGS_DIR"
@@ -148,7 +162,7 @@ check_prerequisites() {
 # =============================================================================
 
 start_filesystem_watcher() {
-    log_info "Starting filesystem watcher..."
+    log_agent "Starting filesystem watcher..."
     
     source "$VENV_DIR/bin/activate"
     python "$WATCHER_SCRIPT" >> "$AGENTS_LOG" 2>&1 &
@@ -167,7 +181,7 @@ start_filesystem_watcher() {
 }
 
 start_task_executor() {
-    log_info "Starting task executor..."
+    log_agent "Starting task executor..."
     
     source "$VENV_DIR/bin/activate"
     python "$EXECUTOR_SCRIPT" >> "$AGENTS_LOG" 2>&1 &
@@ -185,6 +199,82 @@ start_task_executor() {
     fi
 }
 
+start_planner_agent() {
+    log_agent "Starting planner agent..."
+    
+    source "$VENV_DIR/bin/activate"
+    python "$PLANNER_SCRIPT" >> "$AGENTS_LOG" 2>&1 &
+    PLANNER_PID=$!
+    deactivate
+    
+    sleep 1
+    
+    if kill -0 "$PLANNER_PID" 2>/dev/null; then
+        log_success "Planner agent started (PID: $PLANNER_PID)"
+        return 0
+    else
+        log_error "Failed to start planner agent"
+        return 1
+    fi
+}
+
+start_manager_agent() {
+    log_agent "Starting manager agent..."
+    
+    source "$VENV_DIR/bin/activate"
+    python "$MANAGER_SCRIPT" >> "$AGENTS_LOG" 2>&1 &
+    MANAGER_PID=$!
+    deactivate
+    
+    sleep 1
+    
+    if kill -0 "$MANAGER_PID" 2>/dev/null; then
+        log_success "Manager agent started (PID: $MANAGER_PID)"
+        return 0
+    else
+        log_error "Failed to start manager agent"
+        return 1
+    fi
+}
+
+start_validator_agent() {
+    log_agent "Starting validator agent..."
+    
+    source "$VENV_DIR/bin/activate"
+    python "$VALIDATOR_SCRIPT" >> "$AGENTS_LOG" 2>&1 &
+    VALIDATOR_PID=$!
+    deactivate
+    
+    sleep 1
+    
+    if kill -0 "$VALIDATOR_PID" 2>/dev/null; then
+        log_success "Validator agent started (PID: $VALIDATOR_PID)"
+        return 0
+    else
+        log_error "Failed to start validator agent"
+        return 1
+    fi
+}
+
+start_memory_agent() {
+    log_agent "Starting memory agent..."
+    
+    source "$VENV_DIR/bin/activate"
+    python "$MEMORY_SCRIPT" >> "$AGENTS_LOG" 2>&1 &
+    MEMORY_PID=$!
+    deactivate
+    
+    sleep 1
+    
+    if kill -0 "$MEMORY_PID" 2>/dev/null; then
+        log_success "Memory agent started (PID: $MEMORY_PID)"
+        return 0
+    else
+        log_error "Failed to start memory agent"
+        return 1
+    fi
+}
+
 # =============================================================================
 # Status Monitor (Background)
 # =============================================================================
@@ -193,18 +283,48 @@ monitor_agents() {
     while true; do
         sleep 30
         
-        # Check watcher
-        if ! kill -0 "$WATCHER_PID" 2>/dev/null; then
-            log_warning "Filesystem watcher died unexpectedly, restarting..."
-            start_filesystem_watcher
-        fi
-        
-        # Check executor
-        if ! kill -0 "$EXECUTOR_PID" 2>/dev/null; then
-            log_warning "Task executor died unexpectedly, restarting..."
-            start_task_executor
-        fi
+        # Check and restart agents if needed
+        for name_pid in "Watcher:WATCHER_PID" "Executor:EXECUTOR_PID" "Planner:PLANNER_PID" "Manager:MANAGER_PID" "Validator:VALIDATOR_PID" "Memory:MEMORY_PID"; do
+            name="${name_pid%%:*}"
+            pid_var="${name_pid##*:}"
+            pid="${!pid_var}"
+            
+            if ! kill -0 "$pid" 2>/dev/null; then
+                log_warning "$name agent died unexpectedly, restarting..."
+                case "$name" in
+                    Watcher) start_filesystem_watcher ;;
+                    Executor) start_task_executor ;;
+                    Planner) start_planner_agent ;;
+                    Manager) start_manager_agent ;;
+                    Validator) start_validator_agent ;;
+                    Memory) start_memory_agent ;;
+                esac
+            fi
+        done
     done
+}
+
+# =============================================================================
+# Status Display
+# =============================================================================
+
+show_status() {
+    echo ""
+    log_success "============================================"
+    log_success "  Gold Tier AI Employee - Agent Status"
+    log_success "============================================"
+    log_success ""
+    log_success "  Filesystem Watcher:  PID $WATCHER_PID"
+    log_success "  Task Executor:       PID $EXECUTOR_PID"
+    log_success "  Planner Agent:       PID $PLANNER_PID"
+    log_success "  Manager Agent:       PID $MANAGER_PID"
+    log_success "  Validator Agent:     PID $VALIDATOR_PID"
+    log_success "  Memory Agent:        PID $MEMORY_PID"
+    log_success ""
+    log_info "  Logs: $AGENTS_LOG"
+    log_info "  Press Ctrl+C to stop all agents"
+    log_success "============================================"
+    echo ""
 }
 
 # =============================================================================
@@ -214,11 +334,12 @@ monitor_agents() {
 main() {
     echo ""
     echo -e "${CYAN}============================================================${NC}"
-    echo -e "${CYAN}       AI Employee Vault - Silver Tier Startup${NC}"
+    echo -e "${CYAN}       AI Employee Vault - Gold Tier Multi-Agent${NC}"
     echo -e "${CYAN}============================================================${NC}"
     echo ""
     
     log_info "Base Directory: $SCRIPT_DIR"
+    log_info "Agents Directory: $AGENTS_DIR"
     log_info "Agents Log: $AGENTS_LOG"
     echo ""
     
@@ -226,44 +347,28 @@ main() {
     check_prerequisites
     echo ""
     
-    # Start agents
-    log_info "Starting AI Employee agents..."
+    # Start all agents
+    log_info "Starting Gold Tier agent system..."
     echo ""
     
     start_filesystem_watcher
-    FW_RESULT=$?
-    
     start_task_executor
-    TE_RESULT=$?
+    start_planner_agent
+    start_manager_agent
+    start_validator_agent
+    start_memory_agent
     
     echo ""
     
-    if [ $FW_RESULT -eq 0 ] && [ $TE_RESULT -eq 0 ]; then
-        log_success "============================================"
-        log_success "  All agents started successfully!"
-        log_success "============================================"
-        log_success ""
-        log_success "  Filesystem Watcher: PID $WATCHER_PID"
-        log_success "  Task Executor:      PID $EXECUTOR_PID"
-        log_success ""
-        log_info "  Monitoring Inbox/ for new tasks..."
-        log_info "  Processing Needs_Action/ queue..."
-        log_success ""
-        log_info "  Press Ctrl+C to stop all agents"
-        log_success "============================================"
-        echo ""
-        
-        # Start background monitor
-        monitor_agents &
-        MONITOR_PID=$!
-        
-        # Wait for interrupt
-        wait
-    else
-        log_error "Failed to start one or more agents"
-        cleanup
-        exit 1
-    fi
+    # Show status
+    show_status
+    
+    # Start background monitor
+    monitor_agents &
+    MONITOR_PID=$!
+    
+    # Wait for interrupt
+    wait
 }
 
 # Run main

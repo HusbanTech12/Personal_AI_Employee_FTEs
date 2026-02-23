@@ -1,0 +1,8 @@
+{
+  "host": "localhost",
+  "port": 8069,
+  "database": "your_database",
+  "username": "your_username",
+  "api_key": "your_api_key",
+  "protocol": "http"
+}

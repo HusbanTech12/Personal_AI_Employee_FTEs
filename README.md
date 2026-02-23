@@ -1,41 +1,76 @@
-# AI Employee Vault - Bronze Tier
+# AI Employee Vault - Hackathon Gold Tier
 
-A Local-First Personal AI Employee (Digital FTE) built on Obsidian markdown workflow.
+A Local-First Autonomous Multi-Agent AI Employee (Digital FTE) with Cross-Domain Integration.
 
 ---
 
 ## Architecture Overview
 
+### Gold Tier: Cross-Domain Multi-Agent System
+
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     AI Employee System                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   ┌──────────┐    ┌──────────────┐    ┌──────────┐            │
-│   │  Inbox   │───→│ Needs_Action │───→│   Done   │            │
-│   │ (Watch)  │    │  (Process)   │    │ (Store)  │            │
-│   └────┬─────┘    └──────┬───────┘    └──────────┘            │
-│        │                 │                                      │
-│        ▼                 ▼                                      │
-│   ┌─────────────────────────────────┐                          │
-│   │     filesystem_watcher.py       │                          │
-│   │     (Watchdog Monitor)          │                          │
-│   └─────────────────────────────────┘                          │
-│                          │                                      │
-│                          ▼                                      │
-│   ┌─────────────────────────────────┐                          │
-│   │      Qwen AI Agent              │                          │
-│   │      (Task Processing)          │                          │
-│   └─────────────────────────────────┘                          │
-│                          │                                      │
-│        ┌─────────────────┴─────────────────┐                   │
-│        ▼                                   ▼                   │
-│   ┌──────────┐                       ┌──────────┐             │
-│   │Dashboard │                       │  Skills  │             │
-│   │  (UI)    │                       │ (Logic)  │             │
-│   └──────────┘                       └──────────┘             │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+                              USER DROPS FILE
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ┌──────────┐    filesystem_watcher.py    ┌──────────────┐                │
+│  │  /Inbox  │ ───────────────────────────→│ Needs_Action │                │
+│  └──────────┘                              └──────┬───────┘                │
+│                                                   │                        │
+│                                                   ▼                        │
+│                                    ┌──────────────────────────┐            │
+│                                    │  domain_router_agent.py  │            │
+│                                    │   - Classify domain      │            │
+│                                    │   - Route to Personal/   │            │
+│                                    │     Business domain      │            │
+│                                    └───────────┬──────────────┘            │
+│                                                │                            │
+│              ┌─────────────────────────────────┴─────────────────────────┐ │
+│              │                                                           │ │
+│              ▼                                                           ▼ │
+│  ┌─────────────────────┐                                   ┌──────────────┐│
+│  │  Personal Domain    │                                   │ Business     ││
+│  │  - notes            │                                   │ Domain       ││
+│  │  - learning         │                                   │ - accounting ││
+│  │  - reminders        │                                   │ - marketing  ││
+│  │  - health           │                                   │ - reporting  ││
+│  └──────────┬──────────┘                                   └──────┬───────┘│
+│             │                                                     │        │
+│             └─────────────────────┬───────────────────────────────┘        │
+│                                   │                                        │
+│                                   ▼                                        │
+│                      ┌────────────────────────┐                           │
+│                      │   planner_agent.py     │                           │
+│                      │   (per-domain)         │                           │
+│                      └───────────┬────────────┘                           │
+│                                  │                                         │
+│                                  ▼                                         │
+│                      ┌────────────────────────┐                           │
+│                      │   manager_agent.py     │                           │
+│                      │   (skill trigger only) │                           │
+│                      └───────────┬────────────┘                           │
+│                                  │                                         │
+│         ┌────────────────────────┼────────────────────────┐               │
+│         │                        │                        │               │
+│         ▼                        ▼                        ▼               │
+│  ┌─────────────┐         ┌─────────────┐         ┌─────────────┐        │
+│  │ skill agents│         │   approval  │         │   validator │        │
+│  │  (all)      │         │   _agent    │         │   _agent    │        │
+│  └─────────────┘         └─────────────┘         └─────────────┘        │
+│         │                        │                        │               │
+│         └────────────────────────┴────────────────────────┘               │
+│                                   │                                       │
+│                                   ▼                                       │
+│                      ┌────────────────────────┐                          │
+│                      │   memory_agent.py      │                          │
+│                      │   (domain-separated)   │                          │
+│                      └───────────┬────────────┘                          │
+│                                  │                                       │
+│                                  ▼                                       │
+│                            ┌──────────┐                                  │
+│                            │  /Done   │                                  │
+│                            └──────────┘                                  │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -46,7 +81,10 @@ A Local-First Personal AI Employee (Digital FTE) built on Obsidian markdown work
 AI_Employee_Vault/
 ├── Dashboard.md              # Central status & task overview
 ├── Company_Handbook.md       # AI Employee rules & guidelines
+├── domains.md                # Domain configuration
 ├── filesystem_watcher.py     # Python watchdog script
+├── task_executor.py          # Legacy task executor (Bronze)
+├── run_agents.sh             # Gold Tier startup script
 ├── README.md                 # This file
 │
 ├── Inbox/                    # Incoming files (watched)
@@ -59,11 +97,60 @@ AI_Employee_Vault/
 ├── Done/                     # Completed tasks (archived)
 │   └── (moved after completion)
 │
+├── Domains/                  # Cross-domain separation
+│   ├── Personal/             # Personal domain
+│   │   ├── notes/
+│   │   ├── learning/
+│   │   ├── reminders/
+│   │   ├── health/
+│   │   └── memory.md
+│   │
+│   └── Business/             # Business domain
+│       ├── accounting/
+│       ├── marketing/
+│       ├── reporting/
+│       ├── projects/
+│       └── memory.md
+│
 ├── Skills/                   # AI skill definitions
-│   └── task_processor.SKILL.md
+│   ├── task_processor.SKILL.md
+│   ├── coding.SKILL.md
+│   ├── research.SKILL.md
+│   ├── documentation.SKILL.md
+│   ├── planner.SKILL.md
+│   ├── email.SKILL.md
+│   ├── linkedin_marketing.SKILL.md
+│   └── approval.SKILL.md
+│
+├── Agents/                   # Gold Tier agent executables
+│   ├── domain_router_agent.py    # Domain classification & routing
+│   ├── planner_agent.py          # Task analysis & planning
+│   ├── manager_agent.py          # Skill triggering (orchestrator)
+│   ├── validator_agent.py        # Completion verification
+│   ├── memory_agent.py           # Logging & history
+│   ├── approval_agent.py         # Approval workflow
+│   ├── scheduler_agent.py        # Scheduled tasks
+│   ├── task_processor_agent.py   # General tasks
+│   ├── coding_agent.py           # Code generation
+│   ├── research_agent.py         # Research tasks
+│   ├── documentation_agent.py    # Documentation tasks
+│   ├── email_agent.py            # Email (via MCP)
+│   └── linkedin_agent.py         # LinkedIn (via MCP)
+│
+├── MCP/                      # Model Context Protocol servers
+│   ├── email_mcp/
+│   │   └── email_mcp_server.py
+│   └── linkedin_mcp/
+│       └── linkedin_mcp_server.py
 │
 └── Logs/                     # Activity & error logs
     ├── watcher_YYYY-MM-DD.log
+    ├── agents.log
+    ├── domain_routing_log.md
+    ├── scheduler_log.md
+    ├── approval_log.md
+    ├── Marketing/
+    │   └── linkedin_summary_YYYY-MM-DD.md
     └── error_YYYY-MM-DD.md
 ```
 
@@ -75,6 +162,7 @@ AI_Employee_Vault/
 | `Needs_Action/` | Active processing queue | Read/Write | Review items |
 | `Done/` | Completed task archive | Write (move) | Browse history |
 | `Skills/` | Skill definitions | Read | Extend skills |
+| `Agents/` | Agent executables | Execute | Monitor |
 | `Logs/` | System activity logs | Write | Monitor health |
 
 ---
@@ -418,32 +506,81 @@ Your content here
 
 ## Version Info
 
-- **Version:** 1.1
-- **Tier:** Silver
+- **Version:** 2.0
+- **Tier:** Gold
 - **Created:** 2026-02-19
-- **Updated:** 2026-02-22
-- **Architecture:** Local-First
+- **Updated:** 2026-02-23
+- **Architecture:** Multi-Agent Autonomous System
 - **Platform:** Cross-platform (Windows/Linux/Mac/WSL)
 
 ---
 
-## Silver Tier Features
+## Gold Tier Features
 
 | Feature | Description |
 |---------|-------------|
-| **Concurrent Agents** | Filesystem watcher + task executor run simultaneously |
-| **Auto Startup** | Single `run_agents.sh` script starts all components |
-| **Centralized Logging** | All agent output logged to `Logs/agents.log` |
-| **Graceful Shutdown** | Clean termination with Ctrl+C |
-| **Process Monitoring** | Auto-restart if an agent crashes |
-| **WSL Compatible** | Works on Windows Subsystem for Linux |
+| **Multi-Agent System** | 6 specialized agents working concurrently |
+| **Planner Agent** | Analyzes tasks, generates execution plans |
+| **Manager Agent** | Routes tasks to appropriate skill agents |
+| **Validator Agent** | Verifies completion before archiving |
+| **Memory Agent** | Maintains history, updates Dashboard |
+| **Skill Agents** | Specialized execution (coding, research, docs) |
+| **Automatic Routing** | Tasks automatically routed to correct skill |
+| **Retry Logic** | Failed tasks automatically retried |
+| **Execution History** | All executions logged in JSON format |
 
 ---
 
-## Next Steps (Silver/Gold Tier)
+## Agent Descriptions
+
+### Core Intelligence Agents
+
+| Agent | File | Responsibility |
+|-------|------|----------------|
+| **Planner** | `planner_agent.py` | Reads tasks, analyzes content, generates execution plans, classifies tasks |
+| **Manager** | `manager_agent.py` | Reads plans, selects skills, triggers skill agents, handles retries |
+| **Validator** | `validator_agent.py` | Verifies completion, checks deliverables, moves tasks to Done |
+| **Memory** | `memory_agent.py` | Updates Logs, Dashboard, stores execution history |
+
+### Skill Agents
+
+| Agent | File | Skill Type |
+|-------|------|------------|
+| **Task Processor** | `task_processor_agent.py` | General tasks, planning |
+| **Coding** | `coding_agent.py` | Code generation, APIs, scripts |
+| **Research** | `research_agent.py` | Analysis, comparisons, recommendations |
+| **Documentation** | `documentation_agent.py` | README, guides, tutorials, API docs |
+
+---
+
+## Skill-to-Agent Mapping
+
+| Task Type | Skill File | Agent |
+|-----------|------------|-------|
+| Coding | `coding.SKILL.md` | `coding_agent.py` |
+| Research | `research.SKILL.md` | `research_agent.py` |
+| Documentation | `documentation.SKILL.md` | `documentation_agent.py` |
+| Planning | `planner.SKILL.md` | `task_processor_agent.py` |
+| General | `task_processor.SKILL.md` | `task_processor_agent.py` |
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Watcher doesn't start | Check Python installation, run `pip install watchdog` |
+| Files not detected | Ensure file is fully written (not .tmp) |
+| Dashboard not updating | Check file permissions, close in other apps |
+| Path errors on Windows | Use raw string `r"..."` for BASE_DIR |
+| Agent fails to load | Check skill definitions exist in Skills/ |
+
+---
+
+## Next Steps (Future Tiers)
 
 - [ ] Add email integration skill
 - [ ] Implement auto-categorization with ML
 - [ ] Add calendar/scheduling capabilities
 - [ ] Create web dashboard interface
-- [ ] Add multi-agent coordination
+- [ ] Add voice interaction

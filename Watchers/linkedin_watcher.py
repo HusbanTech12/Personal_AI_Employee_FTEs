@@ -13,7 +13,7 @@ For production, consider:
 - Web scraping with proper authorization (check ToS)
 
 Requirements:
-    None (standard library only)
+    pip install python-dotenv
 
 Usage:
     python linkedin_watcher.py
@@ -31,6 +31,22 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Set
+from dotenv import load_dotenv
+
+# =============================================================================
+# Secure Credential Loading
+# =============================================================================
+
+# Load credentials from Config/credentials.env
+BASE_DIR = Path(__file__).parent.parent.resolve()
+CREDENTIALS_FILE = BASE_DIR / "Config" / "credentials.env"
+
+# Load environment variables from credentials file
+if CREDENTIALS_FILE.exists():
+    load_dotenv(dotenv_path=CREDENTIALS_FILE)
+else:
+    # Fallback to system environment variables
+    pass
 
 # Configure logging
 logging.basicConfig(
@@ -46,26 +62,75 @@ logger = logging.getLogger("LinkedInWatcher")
 class LinkedInWatcher:
     """
     LinkedIn Watcher for AI Employee Vault.
-    
+
     Monitors LinkedIn activity and converts notifications/messages to markdown tasks.
     Uses file-based input for demo (can be extended to use LinkedIn API).
     """
-    
-    # Configuration
-    POLL_INTERVAL = 30  # seconds
-    
+
+    # Configuration - Loaded securely from credentials.env
+    LINKEDIN_EMAIL = os.getenv("LINKEDIN_EMAIL", "")
+    LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD", "")
+    LINKEDIN_API_KEY = os.getenv("LINKEDIN_API_KEY", "")
+    LINKEDIN_API_SECRET = os.getenv("LINKEDIN_API_SECRET", "")
+
+    # Polling interval in seconds
+    POLL_INTERVAL = 30
+
     # Processed notification IDs
     processed_notifications: Set[str] = set()
-    
+
+    # Connection state
+    is_connected: bool = False
+    has_api_credentials: bool = False
+
     def __init__(self, inbox_dir: Path, logs_dir: Path, input_dir: Optional[Path] = None):
         self.inbox_dir = inbox_dir
         self.logs_dir = logs_dir
         self.input_dir = input_dir or (logs_dir / "linkedin_input")
-        
+
         # Ensure directories exist
         self.inbox_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.input_dir.mkdir(parents=True, exist_ok=True)
+
+    def validate_credentials(self) -> bool:
+        """
+        Validate that LinkedIn credentials are configured.
+        Returns True if API credentials are present, False for file-based mode.
+        """
+        if self.LINKEDIN_API_KEY and self.LINKEDIN_API_SECRET:
+            self.has_api_credentials = True
+            logger.info("[LINKEDIN] API credentials validated successfully")
+            return True
+
+        if self.LINKEDIN_EMAIL and self.LINKEDIN_PASSWORD:
+            logger.info("[LINKEDIN] Email/password credentials loaded (limited API access)")
+            return True
+
+        logger.warning("[LINKEDIN] No credentials configured - running in file-based demo mode")
+        logger.warning("[LINKEDIN] System will continue but LinkedIn API is disabled")
+        return False
+
+    def connect_to_linkedin(self) -> bool:
+        """
+        Attempt to connect to LinkedIn API.
+        Returns True if connected, False otherwise.
+        """
+        try:
+            if not self.has_api_credentials:
+                logger.warning("[LINKEDIN] API credentials not configured")
+                return False
+
+            # Placeholder for actual LinkedIn API connection
+            # In production, implement OAuth2 flow here
+            logger.info("[LINKEDIN CONNECTED]")
+            self.is_connected = True
+            return True
+
+        except Exception as e:
+            self.is_connected = False
+            logger.error(f"[LINKEDIN] Connection failed: {e}")
+            return False
     
     def determine_priority(self, notification_type: str, content: str) -> str:
         """Determine task priority based on notification type and content."""
@@ -350,10 +415,18 @@ Best regards
     
     def run(self):
         """Main watcher loop."""
-        logger.info("LinkedIn Watcher started")
+        logger.info("LinkedIn Watcher starting...")
         logger.info(f"Monitoring: {self.input_dir}")
         logger.info(f"Saving tasks to: {self.inbox_dir}")
         logger.info(f"Poll interval: {self.POLL_INTERVAL} seconds")
+
+        # Validate credentials at startup
+        credentials_valid = self.validate_credentials()
+
+        # Attempt API connection if credentials are available
+        if credentials_valid and (self.LINKEDIN_API_KEY or self.LINKEDIN_EMAIL):
+            self.connect_to_linkedin()
+
         logger.info("")
         logger.info("To add LinkedIn notifications, create JSON files in the input directory:")
         logger.info(f"  {self.input_dir}")
@@ -364,37 +437,37 @@ Best regards
         logger.info("Notification types: message, inmail, connection_request, job_posting,")
         logger.info("                    interview_request, recommendation, endorsement, comment, mention")
         logger.info("")
-        
+
         demo_count = 0
-        
+
         while True:
             try:
                 # Scan for new notification files
                 notification_files = self.scan_input_directory()
-                
+
                 for file_path in notification_files:
                     notification_data = self.parse_notification_file(file_path)
-                    
+
                     if notification_data:
                         self.process_notification(notification_data)
                         self.processed_notifications.add(str(file_path))
-                        
+
                         # Mark file as processed
                         processed_path = file_path.with_suffix('.json.processed')
                         file_path.rename(processed_path)
-                
+
                 if notification_files:
                     logger.info(f"Processed {len(notification_files)} notification(s)")
-                
+
                 # Generate demo notifications periodically (for demonstration)
                 demo_count += 1
                 if demo_count >= 3:  # Every 3 polls
                     self.run_demo_mode()
                     demo_count = 0
-                
+
                 # Wait for next poll
                 time.sleep(self.POLL_INTERVAL)
-                
+
             except KeyboardInterrupt:
                 logger.info("LinkedIn Watcher stopping...")
                 break

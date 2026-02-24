@@ -10,3 +10,7 @@ Logs/
 
 # Obsidian configs (optional)
 .obsidian/
+
+# Credentials - NEVER COMMIT
+Config/credentials.env
+*.env

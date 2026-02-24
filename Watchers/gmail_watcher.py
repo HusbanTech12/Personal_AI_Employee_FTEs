@@ -9,7 +9,7 @@ NOTE: For production use, configure Gmail API credentials.
 This implementation uses IMAP for demonstration purposes.
 
 Requirements:
-    pip install imaplib2 email
+    pip install imaplib2 email python-dotenv
 
 Usage:
     python gmail_watcher.py
@@ -29,6 +29,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Set
 from email.header import decode_header
+from email.message import Message as EmailMessage
+from dotenv import load_dotenv
+
+# =============================================================================
+# Secure Credential Loading
+# =============================================================================
+
+# Load credentials from Config/credentials.env
+BASE_DIR = Path(__file__).parent.parent.resolve()
+CREDENTIALS_FILE = BASE_DIR / "Config" / "credentials.env"
+
+# Load environment variables from credentials file
+if CREDENTIALS_FILE.exists():
+    load_dotenv(dotenv_path=CREDENTIALS_FILE)
+else:
+    # Fallback to system environment variables
+    pass
 
 # Configure logging
 logging.basicConfig(
@@ -44,47 +61,77 @@ logger = logging.getLogger("GmailWatcher")
 class GmailWatcher:
     """
     Gmail Watcher for AI Employee Vault.
-    
+
     Monitors Gmail inbox and converts emails to markdown tasks.
     """
-    
-    # Configuration - Set via environment variables or update here
+
+    # Configuration - Loaded securely from credentials.env
     IMAP_SERVER = os.getenv("GMAIL_IMAP_SERVER", "imap.gmail.com")
     IMAP_PORT = int(os.getenv("GMAIL_IMAP_PORT", "993"))
-    EMAIL_USER = os.getenv("GMAIL_USER", "")
+    EMAIL_USER = os.getenv("GMAIL_ADDRESS", "")
     EMAIL_PASSWORD = os.getenv("GMAIL_PASSWORD", "")  # Use App Password
-    
+
     # Polling interval in seconds
     POLL_INTERVAL = 30
-    
+
     # Processed email IDs to avoid duplicates
     processed_emails: Set[str] = set()
-    
+
+    # Connection state
+    is_connected: bool = False
+
     def __init__(self, inbox_dir: Path, logs_dir: Path):
         self.inbox_dir = inbox_dir
         self.logs_dir = logs_dir
         self.last_check = datetime.now()
-        
+
         # Ensure directories exist
         self.inbox_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
-    
+
+    def validate_credentials(self) -> bool:
+        """
+        Validate that required credentials are configured.
+        Returns True if credentials are present, False otherwise.
+        """
+        if not self.EMAIL_USER:
+            logger.warning("[GMAIL] GMAIL_ADDRESS not configured")
+            return False
+
+        if not self.EMAIL_PASSWORD:
+            logger.warning("[GMAIL] GMAIL_PASSWORD not configured")
+            return False
+
+        # Basic validation (not checking password strength for security)
+        if len(self.EMAIL_PASSWORD) < 8:
+            logger.warning("[GMAIL] Password appears too short - ensure you're using an App Password")
+
+        logger.info("[GMAIL] Credentials validated successfully")
+        return True
+
     def connect_to_gmail(self) -> Optional[imaplib.IMAP4_SSL]:
         """Connect to Gmail IMAP server."""
         try:
             if not self.EMAIL_USER or not self.EMAIL_PASSWORD:
-                logger.warning("Gmail credentials not configured. Running in demo mode.")
+                logger.warning("[GMAIL] Credentials not configured. Running in demo mode.")
                 return None
-            
+
             mail = imaplib.IMAP4_SSL(self.IMAP_SERVER, self.IMAP_PORT)
             mail.login(self.EMAIL_USER, self.EMAIL_PASSWORD)
             mail.select("inbox")
-            
-            logger.info("Connected to Gmail successfully")
+
+            self.is_connected = True
+            logger.info("[GMAIL CONNECTED]")
             return mail
-            
+
+        except imaplib.IMAP4.error as e:
+            self.is_connected = False
+            logger.error(f"[GMAIL] Authentication failed: {e}")
+            return None
+
         except Exception as e:
-            logger.error(f"Failed to connect to Gmail: {e}")
+            self.is_connected = False
+            logger.error(f"[GMAIL] Connection failed: {e}")
             return None
     
     def decode_mime_word(self, mime_word: str) -> str:
@@ -110,7 +157,7 @@ class GmailWatcher:
         """Decode email subject line."""
         return self.decode_mime_word(subject)
     
-    def get_email_body(self, msg: email.message.Message) -> str:
+    def get_email_body(self, msg: EmailMessage) -> str:
         """Extract plain text body from email."""
         body = ""
         
@@ -436,35 +483,45 @@ This is an automated alert.''',
     
     def run(self):
         """Main watcher loop."""
-        logger.info("Gmail Watcher started")
+        logger.info("Gmail Watcher starting...")
         logger.info(f"Monitoring inbox, saving to: {self.inbox_dir}")
         logger.info(f"Poll interval: {self.POLL_INTERVAL} seconds")
-        
+
+        # Validate credentials at startup
+        credentials_valid = self.validate_credentials()
+
+        if not credentials_valid:
+            logger.warning("[GMAIL] Running in DEMO mode - no credentials configured")
+            logger.warning("[GMAIL] System will continue but Gmail monitoring is disabled")
+
+        demo_mode = False
+
         while True:
             try:
                 # Try to connect to Gmail
                 mail = self.connect_to_gmail()
-                
+
                 if mail:
                     # Fetch and process new emails
                     new_emails = self.fetch_new_emails(mail)
-                    
+
                     for email_data in new_emails:
                         self.process_email(email_data)
-                    
+
                     if new_emails:
                         logger.info(f"Processed {len(new_emails)} new email(s)")
-                    
+
                     # Close connection
                     mail.close()
                     mail.logout()
                 else:
                     # No credentials - run demo mode periodically
-                    logger.debug("No Gmail credentials - skipping (demo mode available)")
-                
+                    if not demo_mode:
+                        logger.debug("[GMAIL] No Gmail credentials - skipping (demo mode available)")
+
                 # Wait for next poll
                 time.sleep(self.POLL_INTERVAL)
-                
+
             except KeyboardInterrupt:
                 logger.info("Gmail Watcher stopping...")
                 break

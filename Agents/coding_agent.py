@@ -605,9 +605,10 @@ See code implementation above for usage examples.
 if __name__ == "__main__":
     # Test execution
     BASE_DIR = Path(__file__).parent.parent
-    
+    VAULT_PATH = BASE_DIR / "notes"
+
     agent = CodingAgent(
-        skills_dir=BASE_DIR / "Skills",
+        skills_dir=VAULT_PATH / "Skills",
         logs_dir=BASE_DIR / "Logs"
     )
     

@@ -716,5 +716,6 @@ def log_retry(operation: str, attempt: int, max_attempts: int, **kwargs):
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
+    VAULT_PATH = BASE_DIR / "notes"
     agent = AuditAgent(base_dir=BASE_DIR)
     agent.run()

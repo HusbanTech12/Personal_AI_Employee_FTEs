@@ -109,11 +109,12 @@ class DomainRouterAgent:
         'projects': ['project', 'deliverable', 'milestone', 'sprint', 'client']
     }
     
-    def __init__(self, base_dir: Path, domains_dir: Optional[Path] = None):
+    def __init__(self, base_dir: Path, vault_path: Optional[Path] = None, domains_dir: Optional[Path] = None):
         self.base_dir = base_dir
-        self.domains_dir = domains_dir or (base_dir / "Domains")
-        self.inbox_dir = base_dir / "Inbox"
-        self.needs_action_dir = base_dir / "Needs_Action"
+        self.vault_path = vault_path or (base_dir / "notes")
+        self.domains_dir = domains_dir or (self.vault_path / "Domains")
+        self.inbox_dir = self.vault_path / "Inbox"
+        self.needs_action_dir = self.vault_path / "Needs_Action"
         self.logs_dir = base_dir / "Logs"
         
         self.personal_dir = self.domains_dir / "Personal"
@@ -539,5 +540,6 @@ import time
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
-    agent = DomainRouterAgent(base_dir=BASE_DIR)
+    VAULT_PATH = BASE_DIR / "notes"
+    agent = DomainRouterAgent(base_dir=BASE_DIR, vault_path=VAULT_PATH)
     agent.run()

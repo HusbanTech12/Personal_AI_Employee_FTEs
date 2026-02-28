@@ -38,6 +38,10 @@ from dotenv import load_dotenv
 
 # Load credentials from Config/credentials.env
 BASE_DIR = Path(__file__).parent.parent.resolve()
+
+# Centralized vault path - all Obsidian vault folders are relative to this
+VAULT_PATH = BASE_DIR / "notes"
+
 CREDENTIALS_FILE = BASE_DIR / "Config" / "credentials.env"
 
 # Load environment variables from credentials file
@@ -531,9 +535,13 @@ This is an automated alert.''',
 
 
 if __name__ == "__main__":
-    BASE_DIR = Path(__file__).parent.parent
+    BASE_DIR = Path(__file__).parent.parent.resolve()
+
+    # Centralized vault path - all Obsidian vault folders are relative to this
+    VAULT_PATH = BASE_DIR / "notes"
+
     watcher = GmailWatcher(
-        inbox_dir=BASE_DIR / "Inbox",
+        inbox_dir=VAULT_PATH / "Inbox",
         logs_dir=BASE_DIR / "Logs"
     )
     watcher.run()

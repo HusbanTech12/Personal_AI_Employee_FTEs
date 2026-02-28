@@ -1,227 +1,220 @@
 #!/usr/bin/env python3
 """
-WhatsApp Watcher - Silver Tier AI Employee
+WhatsApp Watcher - Gold Tier AI Employee
 
-Monitors WhatsApp messages and converts them into markdown tasks.
-Saves tasks to /Inbox folder for processing by the AI Employee system.
+Monitors WhatsApp messages via Twilio webhook server and converts them
+into markdown tasks for the AI Employee system.
 
-NOTE: WhatsApp does not have an official public API for personal accounts.
-This implementation uses a file-based approach for demo purposes.
-For production, consider:
-- WhatsApp Business API
-- Third-party services like Twilio
-- Screen scraping (not recommended)
+Features:
+- Flask-based webhook server for Twilio POST requests
+- Parses incoming WhatsApp messages
+- Creates task files in Inbox folder
+- Supports demo mode for testing without Twilio
+
+Flow:
+    User WhatsApp Message → Twilio Webhook → WhatsApp Watcher → Inbox Task
 
 Requirements:
-    pip install python-dotenv
+    pip install flask twilio python-dotenv
 
 Usage:
-    python whatsapp_watcher.py
+    python Watchers/whatsapp_watcher.py
 
 Stop:
-    Press Ctrl+C to gracefully stop monitoring
+    Press Ctrl+C to gracefully stop the watcher
 """
 
 import os
 import sys
-import time
-import logging
 import re
 import json
+import time
+import logging
+import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Set
-from dotenv import load_dotenv
+from typing import Optional, Dict, Set
+from flask import Flask, request, jsonify
+from twilio.twiml.messaging_response import MessagingResponse
 
 # =============================================================================
-# Secure Credential Loading
+# Configuration
 # =============================================================================
 
-# Load credentials from Config/credentials.env
 BASE_DIR = Path(__file__).parent.parent.resolve()
-CREDENTIALS_FILE = BASE_DIR / "Config" / "credentials.env"
 
-# Load environment variables from credentials file
-if CREDENTIALS_FILE.exists():
-    load_dotenv(dotenv_path=CREDENTIALS_FILE)
-else:
-    # Fallback to system environment variables
-    pass
+# Centralized vault path - all Obsidian vault folders are relative to this
+VAULT_PATH = BASE_DIR / "notes"
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger("WhatsAppWatcher")
+CONFIG_DIR = BASE_DIR / "Config"
+INBOX_DIR = VAULT_PATH / "Inbox"
+LOGS_DIR = BASE_DIR / "Logs"
+CONFIG_FILE = CONFIG_DIR / "twilio_config.json"
+
+# Logging configuration
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+# =============================================================================
+# Logging Setup
+# =============================================================================
+
+def setup_logging() -> logging.Logger:
+    """Configure logging to both file and console."""
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+    log_file = LOGS_DIR / f"whatsapp_watcher_{datetime.now().strftime('%Y-%m-%d')}.log"
+
+    # Clear existing handlers to avoid duplicates
+    root_logger = logging.getLogger()
+    root_logger.handlers = []
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format=LOG_FORMAT,
+        datefmt=LOG_DATE_FORMAT,
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    return logging.getLogger("WhatsAppWatcher")
 
 
-class WhatsAppWatcher:
-    """
-    WhatsApp Watcher for AI Employee Vault.
+logger = setup_logging()
 
-    Monitors for WhatsApp messages and converts them to markdown tasks.
-    Uses file-based input for demo (can be extended to use WhatsApp Business API).
-    """
 
-    # Configuration - Loaded securely from credentials.env
-    WHATSAPP_PHONE_NUMBER = os.getenv("WHATSAPP_PHONE_NUMBER", "")
-    WHATSAPP_API_KEY = os.getenv("WHATSAPP_API_KEY", "")
-    WHATSAPP_API_SECRET = os.getenv("WHATSAPP_API_SECRET", "")
-    TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+# =============================================================================
+# Twilio Config Loader
+# =============================================================================
 
-    # Polling interval in seconds
-    POLL_INTERVAL = 15
+class TwilioConfig:
+    """Twilio configuration holder."""
 
-    # Processed message IDs
-    processed_messages: Set[str] = set()
+    def __init__(self):
+        self.account_sid = ""
+        self.auth_token = ""
+        self.whatsapp_number = ""
+        self.webhook_host = "127.0.0.1"
+        self.webhook_port = 5000
+        self.webhook_endpoint = "/whatsapp/webhook"
+        self.load_config()
 
-    # Connection state
-    is_connected: bool = False
-    has_api_credentials: bool = False
+    def load_config(self):
+        """Load configuration from file and environment."""
+        if not CONFIG_FILE.exists():
+            logger.warning(f"Config file not found: {CONFIG_FILE}")
+            return
 
-    def __init__(self, inbox_dir: Path, logs_dir: Path, input_dir: Optional[Path] = None):
-        self.inbox_dir = inbox_dir
-        self.logs_dir = logs_dir
-        self.input_dir = input_dir or (logs_dir / "whatsapp_input")
-
-        # Ensure directories exist
-        self.inbox_dir.mkdir(parents=True, exist_ok=True)
-        self.logs_dir.mkdir(parents=True, exist_ok=True)
-        self.input_dir.mkdir(parents=True, exist_ok=True)
-
-    def validate_credentials(self) -> bool:
-        """
-        Validate that WhatsApp credentials are configured.
-        Returns True if API credentials are present, False for file-based mode.
-        """
-        # Check for Twilio credentials
-        if self.TWILIO_ACCOUNT_SID and self.TWILIO_AUTH_TOKEN:
-            self.has_api_credentials = True
-            logger.info("[WHATSAPP] Twilio credentials validated successfully")
-            return True
-
-        # Check for WhatsApp Business API credentials
-        if self.WHATSAPP_API_KEY and self.WHATSAPP_API_SECRET:
-            self.has_api_credentials = True
-            logger.info("[WHATSAPP] WhatsApp Business API credentials validated successfully")
-            return True
-
-        logger.warning("[WHATSAPP] No credentials configured - running in file-based demo mode")
-        logger.warning("[WHATSAPP] System will continue but WhatsApp API is disabled")
-        return False
-
-    def connect_to_whatsapp(self) -> bool:
-        """
-        Attempt to connect to WhatsApp API (Twilio or Business API).
-        Returns True if connected, False otherwise.
-        """
         try:
-            if not self.has_api_credentials:
-                logger.warning("[WHATSAPP] API credentials not configured")
-                return False
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                raw_config = json.load(f)
 
-            # Placeholder for actual WhatsApp/Twilio API connection
-            # In production, implement Twilio client initialization here
-            logger.info("[WHATSAPP CONNECTED]")
-            self.is_connected = True
-            return True
+            # Load from environment (secure) or fallback to config file
+            self.account_sid = os.getenv("TWILIO_ACCOUNT_SID", raw_config.get("account_sid", ""))
+            self.auth_token = os.getenv("TWILIO_AUTH_TOKEN", raw_config.get("auth_token", ""))
+            self.whatsapp_number = os.getenv("TWILIO_WHATSAPP_NUMBER", raw_config.get("whatsapp_number", ""))
+
+            # Webhook settings
+            webhook = raw_config.get("webhook", {})
+            self.webhook_host = webhook.get("host", "127.0.0.1")
+            self.webhook_port = webhook.get("port", 5000)
+            self.webhook_endpoint = webhook.get("endpoint", "/whatsapp/webhook")
+
+            logger.info("Twilio configuration loaded")
 
         except Exception as e:
-            self.is_connected = False
-            logger.error(f"[WHATSAPP] Connection failed: {e}")
-            return False
-    
-    def determine_priority(self, message: str, contact: str) -> str:
+            logger.error(f"Failed to load config: {e}")
+
+
+# =============================================================================
+# WhatsApp Task Creator
+# =============================================================================
+
+class WhatsAppTaskCreator:
+    """Creates markdown tasks from WhatsApp messages."""
+
+    def __init__(self, inbox_dir: Path):
+        self.inbox_dir = inbox_dir
+        self.inbox_dir.mkdir(parents=True, exist_ok=True)
+        self.processed_messages: Set[str] = set()
+
+    def determine_priority(self, message: str) -> str:
         """Determine task priority based on message content."""
         message_lower = message.lower()
-        
-        # High priority indicators
+
         high_priority = ['urgent', 'asap', 'emergency', 'critical', 'important',
-                         'call me', 'call back', 'immediate', 'deadline']
-        
-        # Medium priority indicators
+                         'call me', 'call back', 'immediate', 'deadline', 'help']
         medium_priority = ['meeting', 'tomorrow', 'today', 'reminder', 'please',
-                           'can you', 'could you', 'when you get a chance']
-        
+                           'can you', 'could you', 'when you get a chance', 'question']
+
         for keyword in high_priority:
             if keyword in message_lower:
                 return "high"
-        
+
         for keyword in medium_priority:
             if keyword in message_lower:
                 return "medium"
-        
+
         return "standard"
-    
-    def extract_action_items(self, message: str) -> List[str]:
+
+    def extract_action_items(self, message: str) -> list:
         """Extract potential action items from message."""
         action_items = []
-        
-        # Look for lines with action indicators
         action_indicators = ['please ', 'need to ', 'have to ', 'must ', 'should ',
-                             'can you ', 'could you ', 'will you ', 'action:']
-        
+                             'can you ', 'could you ', 'will you ', 'action:', 'task:']
+
         message_lower = message.lower()
-        
-        # Check for action indicators
+
         for indicator in action_indicators:
             if indicator in message_lower:
-                # Extract the sentence/phrase
                 sentences = re.split(r'[.!?]', message)
                 for sentence in sentences:
                     if indicator in sentence.lower() and len(sentence.strip()) < 200:
                         action_items.append(sentence.strip())
-        
-        # Look for question marks (often indicate requests)
+
+        # Look for questions
         questions = re.findall(r'([^?]+\?)', message)
         for question in questions[:3]:
             if len(question.strip()) > 10 and question not in action_items:
                 action_items.append(question.strip())
-        
-        return list(set(action_items))[:5]  # Limit to 5 unique items
-    
-    def create_task_markdown(self, contact: str, message: str, timestamp: str,
-                             message_type: str = "text", group: Optional[str] = None) -> tuple:
+
+        return list(set(action_items))[:5]
+
+    def create_task_markdown(self, sender: str, message: str, timestamp: str,
+                             message_sid: str = "") -> tuple:
         """Create markdown task from WhatsApp message."""
-        priority = self.determine_priority(message, contact)
+        priority = self.determine_priority(message)
         action_items = self.extract_action_items(message)
-        
-        # Clean contact name for filename
-        clean_contact = re.sub(r'[^\w\s-]', '', contact)[:30].strip()
-        clean_contact = clean_contact.replace(' ', '_').lower()
-        
+
+        # Clean sender for filename
+        clean_sender = re.sub(r'[^\w\s-]', '', sender)[:30].strip()
+        clean_sender = clean_sender.replace(' ', '_').lower()
+
         # Clean message preview for filename
         message_preview = message[:30].replace(' ', '_').lower()
         message_preview = re.sub(r'[^\w-]', '', message_preview)
-        
+
         # Build task content
         task_content = f"""---
 title: WhatsApp: {message[:50]}{'...' if len(message) > 50 else ''}
-status: needs_action
+status: New
 priority: {priority}
 created: {timestamp}
 skill: task_processor
 source: WhatsApp
-contact: {contact}
-message_type: {message_type}
+sender: {sender}
+message_sid: {message_sid}
+approval: Not Required
 ---
 
 # WhatsApp Message Task
 
-**From:** {contact}
+**From:** {sender}
 
 **Received:** {timestamp}
 
 **Source:** WhatsApp
-
-**Type:** {message_type}
-
-{'**Group:** ' + group if group else ''}
 
 **Priority:** {priority.title()}
 
@@ -236,213 +229,287 @@ message_type: {message_type}
 ## Action Items
 
 """
-        
         if action_items:
             for item in action_items:
                 task_content += f"- [ ] {item}\n"
         else:
             task_content += "- [ ] Review and respond to this message\n"
-        
+
         task_content += f"""
 ---
 
-## Response Template
+## Execution Result
 
-```
-Hi {contact.split()[0] if contact else 'there'},
+*To be filled by AI Employee after processing*
 
-Thanks for your message. I'll get back to you soon.
+---
 
-Best regards
-```
+## Response
+
+*Auto-reply will be sent via WhatsApp after task completion*
 
 ---
 
 ## Notes
 
 - Automatically imported from WhatsApp
-- Consider responding via WhatsApp for context
-- Priority auto-assigned based on content analysis
+- AI Employee will process this task
+- Reply will be sent automatically upon completion
 """
-        
-        filename = f"whatsapp_{clean_contact}_{message_preview}"
-        
+
+        filename = f"whatsapp_task_{timestamp.replace(' ', '_').replace(':', '')}_{clean_sender}.md"
+
         return task_content, filename
-    
+
     def save_task(self, task_content: str, filename: str) -> Path:
         """Save task to Inbox folder."""
+        task_path = self.inbox_dir / filename
+
         # Ensure unique filename
-        task_path = self.inbox_dir / f"{filename}.md"
-        
         counter = 1
         while task_path.exists():
-            task_path = self.inbox_dir / f"{filename}_{counter}.md"
+            name = filename.rsplit('.', 1)[0]
+            task_path = self.inbox_dir / f"{name}_{counter}.md"
             counter += 1
-        
+
         with open(task_path, 'w', encoding='utf-8') as f:
             f.write(task_content)
-        
+
         logger.info(f"Task saved: {task_path.name}")
         return task_path
-    
-    def parse_message_file(self, file_path: Path) -> Optional[Dict]:
-        """Parse a message file from input directory."""
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            return {
-                'id': data.get('id', str(file_path)),
-                'contact': data.get('contact', 'Unknown'),
-                'message': data.get('message', ''),
-                'timestamp': data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
-                'type': data.get('type', 'text'),
-                'group': data.get('group')
-            }
-        except Exception as e:
-            logger.error(f"Failed to parse message file {file_path}: {e}")
-            return None
-    
-    def process_message(self, message_data: Dict):
-        """Process a single message and create task."""
-        task_content, filename = self.create_task_markdown(
-            contact=message_data['contact'],
-            message=message_data['message'],
-            timestamp=message_data['timestamp'],
-            message_type=message_data.get('type', 'text'),
-            group=message_data.get('group')
-        )
-        
-        self.save_task(task_content, filename)
-    
-    def scan_input_directory(self) -> List[Path]:
-        """Scan input directory for new message files."""
-        message_files = []
-        
-        if not self.input_dir.exists():
-            return message_files
-        
-        for file_path in self.input_dir.iterdir():
-            if file_path.suffix.lower() in ['.json', '.txt']:
-                if str(file_path) not in self.processed_messages:
-                    message_files.append(file_path)
-        
-        return message_files
-    
+
+
+# =============================================================================
+# WhatsApp Webhook Server
+# =============================================================================
+
+class WhatsAppWebhookServer:
+    """
+    Flask-based webhook server for Twilio WhatsApp integration.
+
+    Receives POST requests from Twilio when WhatsApp messages arrive.
+    """
+
+    def __init__(self, config: TwilioConfig, task_creator: WhatsAppTaskCreator):
+        self.config = config
+        self.task_creator = task_creator
+        self.app = Flask(__name__)
+        self.server_thread: Optional[threading.Thread] = None
+        self.is_running = False
+
+        self._setup_routes()
+
+    def _setup_routes(self):
+        """Setup Flask routes."""
+
+        @self.app.route(self.config.webhook_endpoint, methods=['POST'])
+        def whatsapp_webhook():
+            """Handle incoming WhatsApp messages from Twilio."""
+            logger.info("Received WhatsApp webhook")
+
+            try:
+                # Extract Twilio parameters
+                from_number = request.form.get('From', '')
+                to_number = request.form.get('To', '')
+                body = request.form.get('Body', '')
+                message_sid = request.form.get('MessageSid', '')
+                timestamp = request.form.get('Timestamp', datetime.now().isoformat())
+
+                # Log incoming message
+                logger.info(f"Message from: {from_number}")
+                logger.info(f"Message body: {body[:100]}...")
+
+                # Create task
+                task_content, filename = self.task_creator.create_task_markdown(
+                    sender=from_number,
+                    message=body,
+                    timestamp=timestamp,
+                    message_sid=message_sid
+                )
+
+                task_path = self.task_creator.save_task(task_content, filename)
+
+                logger.info(f"Task created: {task_path}")
+
+                # Return Twilio response (empty - we just acknowledge)
+                resp = MessagingResponse()
+                return str(resp)
+
+            except Exception as e:
+                logger.error(f"Webhook error: {e}")
+                return str(MessagingResponse()), 500
+
+        @self.app.route('/health', methods=['GET'])
+        def health_check():
+            """Health check endpoint."""
+            return jsonify({
+                'status': 'healthy',
+                'service': 'WhatsApp Watcher',
+                'timestamp': datetime.now().isoformat()
+            })
+
+        @self.app.route('/status', methods=['GET'])
+        def status():
+            """Status endpoint."""
+            return jsonify({
+                'running': self.is_running,
+                'host': self.config.webhook_host,
+                'port': self.config.webhook_port,
+                'endpoint': self.config.webhook_endpoint,
+                'processed_messages': len(self.task_creator.processed_messages)
+            })
+
+    def start(self):
+        """Start the webhook server in a background thread."""
+        if self.is_running:
+            logger.warning("Webhook server already running")
+            return
+
+        def run_server():
+            logger.info(f"Starting WhatsApp webhook server on {self.config.webhook_host}:{self.config.webhook_port}")
+            logger.info(f"Webhook endpoint: {self.config.webhook_endpoint}")
+            self.is_running = True
+            self.app.run(
+                host=self.config.webhook_host,
+                port=self.config.webhook_port,
+                debug=False,
+                threaded=True
+            )
+
+        self.server_thread = threading.Thread(target=run_server, daemon=True)
+        self.server_thread.start()
+
+        # Wait for server to start
+        time.sleep(2)
+
+    def stop(self):
+        """Stop the webhook server."""
+        self.is_running = False
+        if self.server_thread:
+            self.server_thread.join(timeout=5)
+        logger.info("WhatsApp webhook server stopped")
+
+
+# =============================================================================
+# Demo Mode Handler
+# =============================================================================
+
+class DemoModeHandler:
+    """Generates demo WhatsApp messages for testing."""
+
+    def __init__(self, task_creator: WhatsAppTaskCreator):
+        self.task_creator = task_creator
+
     def generate_demo_message(self) -> Dict:
-        """Generate a demo WhatsApp message for testing."""
+        """Generate a demo WhatsApp message."""
         demo_messages = [
             {
-                'id': f"demo_{datetime.now().timestamp()}_1",
-                'contact': 'John Manager',
-                'message': 'Hey, can you send me the project status update by EOD? Need it for the steering committee meeting tomorrow.',
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'type': 'text',
-                'group': None
+                'from': 'whatsapp:+1234567890',
+                'body': 'Hey, can you send me the project status update by EOD? Need it for the steering committee meeting tomorrow.',
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             },
             {
-                'id': f"demo_{datetime.now().timestamp()}_2",
-                'contact': 'Sarah Team Lead',
-                'message': 'URGENT: The client is asking about the deliverable. When can we ship?',
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'type': 'text',
-                'group': None
+                'from': 'whatsapp:+1987654321',
+                'body': 'URGENT: The client is asking about the deliverable. When can we ship?',
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             },
             {
-                'id': f"demo_{datetime.now().timestamp()}_3",
-                'contact': 'Project Team',
-                'message': 'Reminder: Team lunch at 12:30 today! Please confirm if you\'re coming.',
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'type': 'text',
-                'group': 'Project Team'
+                'from': 'whatsapp:+1122334455',
+                'body': 'Reminder: Team lunch at 12:30 today! Please confirm if you\'re coming.',
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             },
             {
-                'id': f"demo_{datetime.now().timestamp()}_4",
-                'contact': 'Mom',
-                'message': 'Call me when you get a chance. Love you!',
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'type': 'text',
-                'group': None
+                'from': 'whatsapp:+1555666777',
+                'body': 'Can you help me review the document I sent earlier? Would appreciate your feedback.',
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
         ]
-        
+
         import random
         return random.choice(demo_messages)
-    
-    def run_demo_mode(self):
-        """Run in demo mode generating sample messages."""
-        logger.info("Running in DEMO mode - generating sample WhatsApp messages")
-        
-        # Generate and process demo message
-        demo_message = self.generate_demo_message()
-        self.process_message(demo_message)
-        
-        logger.info(f"Demo message processed from: {demo_message['contact']}")
-    
+
+    def process_demo_message(self):
+        """Process a demo message."""
+        demo = self.generate_demo_message()
+
+        task_content, filename = self.task_creator.create_task_markdown(
+            sender=demo['from'],
+            message=demo['body'],
+            timestamp=demo['timestamp'],
+            message_sid=f"demo_{datetime.now().timestamp()}"
+        )
+
+        self.task_creator.save_task(task_content, filename)
+        logger.info(f"Demo message processed from: {demo['from']}")
+
+
+# =============================================================================
+# Main WhatsApp Watcher
+# =============================================================================
+
+class WhatsAppWatcher:
+    """
+    Main WhatsApp Watcher for AI Employee Vault.
+
+    Combines webhook server with demo mode for testing.
+    """
+
+    def __init__(self):
+        self.config = TwilioConfig()
+        self.task_creator = WhatsAppTaskCreator(INBOX_DIR)
+        self.webhook_server = WhatsAppWebhookServer(self.config, self.task_creator)
+        self.demo_handler = DemoModeHandler(self.task_creator)
+
+        # Demo mode settings
+        self.demo_mode = True
+        self.demo_interval = 60  # seconds between demo messages
+        self.demo_count = 0
+
     def run(self):
         """Main watcher loop."""
-        logger.info("WhatsApp Watcher starting...")
-        logger.info(f"Monitoring: {self.input_dir}")
-        logger.info(f"Saving tasks to: {self.inbox_dir}")
-        logger.info(f"Poll interval: {self.POLL_INTERVAL} seconds")
+        logger.info("=" * 60)
+        logger.info("WhatsApp Watcher Starting...")
+        logger.info(f"Inbox: {INBOX_DIR}")
+        logger.info(f"Webhook: {self.config.webhook_host}:{self.config.webhook_port}")
+        logger.info(f"Endpoint: {self.config.webhook_endpoint}")
+        logger.info(f"Demo Mode: {self.demo_mode}")
+        logger.info("=" * 60)
 
-        # Validate credentials at startup
-        credentials_valid = self.validate_credentials()
-
-        # Attempt API connection if credentials are available
-        if credentials_valid and (self.TWILIO_ACCOUNT_SID or self.WHATSAPP_API_KEY):
-            self.connect_to_whatsapp()
+        # Start webhook server
+        self.webhook_server.start()
 
         logger.info("")
-        logger.info("To add WhatsApp messages, create JSON files in the input directory:")
-        logger.info(f"  {self.input_dir}")
+        logger.info("WhatsApp Watcher is ready!")
         logger.info("")
-        logger.info("JSON format:")
-        logger.info('  {"contact": "Name", "message": "Text", "timestamp": "2024-01-01 12:00:00"}')
+        logger.info("To test with Twilio:")
+        logger.info(f"  1. Set your webhook URL to: http://YOUR_PUBLIC_IP:{self.config.webhook_port}{self.config.webhook_endpoint}")
+        logger.info("  2. Use ngrok for local testing: ngrok http 5000")
+        logger.info("")
+        logger.info("Demo messages will be generated every 60 seconds")
         logger.info("")
 
-        demo_count = 0
+        try:
+            while True:
+                # Generate demo messages periodically
+                if self.demo_mode:
+                    self.demo_count += 1
+                    if self.demo_count >= self.demo_interval:
+                        self.demo_handler.process_demo_message()
+                        self.demo_count = 0
 
-        while True:
-            try:
-                # Scan for new message files
-                message_files = self.scan_input_directory()
+                time.sleep(1)
 
-                for file_path in message_files:
-                    message_data = self.parse_message_file(file_path)
+        except KeyboardInterrupt:
+            logger.info("")
+            logger.info("WhatsApp Watcher stopping...")
+            self.webhook_server.stop()
+            logger.info("WhatsApp Watcher stopped")
 
-                    if message_data:
-                        self.process_message(message_data)
-                        self.processed_messages.add(str(file_path))
 
-                        # Mark file as processed
-                        processed_path = file_path.with_suffix('.json.processed')
-                        file_path.rename(processed_path)
-
-                if message_files:
-                    logger.info(f"Processed {len(message_files)} message(s)")
-
-                # Generate demo messages periodically (for demonstration)
-                demo_count += 1
-                if demo_count >= 5:  # Every 5 polls
-                    self.run_demo_mode()
-                    demo_count = 0
-
-                # Wait for next poll
-                time.sleep(self.POLL_INTERVAL)
-
-            except KeyboardInterrupt:
-                logger.info("WhatsApp Watcher stopping...")
-                break
-            except Exception as e:
-                logger.error(f"Error in WhatsApp watcher: {e}")
-                time.sleep(self.POLL_INTERVAL)
-
+# =============================================================================
+# Entry Point
+# =============================================================================
 
 if __name__ == "__main__":
-    BASE_DIR = Path(__file__).parent.parent
-    watcher = WhatsAppWatcher(
-        inbox_dir=BASE_DIR / "Inbox",
-        logs_dir=BASE_DIR / "Logs"
-    )
+    watcher = WhatsAppWatcher()
     watcher.run()

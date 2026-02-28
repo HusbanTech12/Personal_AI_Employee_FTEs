@@ -34,11 +34,14 @@ from typing import Dict, Optional
 # Auto-detect base directory (works on Windows and Linux)
 BASE_DIR = Path(__file__).parent.resolve()
 
-INBOX_DIR = BASE_DIR / "Inbox"
-NEEDS_ACTION_DIR = BASE_DIR / "Needs_Action"
-DONE_DIR = BASE_DIR / "Done"
+# Centralized vault path - all Obsidian vault folders are relative to this
+VAULT_PATH = BASE_DIR / "notes"
+
+INBOX_DIR = VAULT_PATH / "Inbox"
+NEEDS_ACTION_DIR = VAULT_PATH / "Needs_Action"
+DONE_DIR = VAULT_PATH / "Done"
 LOGS_DIR = BASE_DIR / "Logs"
-DASHBOARD_FILE = BASE_DIR / "Dashboard.md"
+DASHBOARD_FILE = VAULT_PATH / "Dashboard.md"
 ACTIVITY_LOG_FILE = LOGS_DIR / "activity_log.md"
 
 # File extensions to process

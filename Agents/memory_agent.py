@@ -382,9 +382,10 @@ import time
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
+    VAULT_PATH = BASE_DIR / "notes"
     agent = MemoryAgent(
         logs_dir=BASE_DIR / "Logs",
-        dashboard_file=BASE_DIR / "Dashboard.md",
-        done_dir=BASE_DIR / "Done"
+        dashboard_file=VAULT_PATH / "Dashboard.md",
+        done_dir=VAULT_PATH / "Done"
     )
     agent.run()

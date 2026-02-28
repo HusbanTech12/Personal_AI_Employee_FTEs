@@ -677,6 +677,7 @@ class ResilienceAgent:
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
+    VAULT_PATH = BASE_DIR / "notes"
     agent = ResilienceAgent(base_dir=BASE_DIR)
     
     # Register agents for monitoring

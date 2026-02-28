@@ -33,6 +33,8 @@ PLANNER_SCRIPT="$AGENTS_DIR/planner_agent.py"
 MANAGER_SCRIPT="$AGENTS_DIR/manager_agent.py"
 VALIDATOR_SCRIPT="$AGENTS_DIR/validator_agent.py"
 MEMORY_SCRIPT="$AGENTS_DIR/memory_agent.py"
+WHATSAPP_AGENT_SCRIPT="$AGENTS_DIR/whatsapp_agent.py"
+LINKEDIN_AGENT_SCRIPT="$AGENTS_DIR/linkedin_agent.py"
 
 # =============================================================================
 # Colors for Output
@@ -141,6 +143,20 @@ check_prerequisites() {
             log_warning "Skill definition missing: ${skill}.SKILL.md"
         fi
     done
+
+    # Check WhatsApp agent script
+    if [ ! -f "$WHATSAPP_AGENT_SCRIPT" ]; then
+        log_warning "WhatsApp agent not found (optional): $WHATSAPP_AGENT_SCRIPT"
+    else
+        log_success "WhatsApp agent found"
+    fi
+
+    # Check LinkedIn agent script
+    if [ ! -f "$LINKEDIN_AGENT_SCRIPT" ]; then
+        log_warning "LinkedIn agent not found (optional): $LINKEDIN_AGENT_SCRIPT"
+    else
+        log_success "LinkedIn agent found"
+    fi
     log_success "Skill definitions verified"
     
     # Ensure logs directory exists
@@ -258,19 +274,69 @@ start_validator_agent() {
 
 start_memory_agent() {
     log_agent "Starting memory agent..."
-    
+
     source "$VENV_DIR/bin/activate"
     python "$MEMORY_SCRIPT" >> "$AGENTS_LOG" 2>&1 &
     MEMORY_PID=$!
     deactivate
-    
+
     sleep 1
-    
+
     if kill -0 "$MEMORY_PID" 2>/dev/null; then
         log_success "Memory agent started (PID: $MEMORY_PID)"
         return 0
     else
         log_error "Failed to start memory agent"
+        return 1
+    fi
+}
+
+start_whatsapp_agent() {
+    log_agent "Starting WhatsApp agent..."
+
+    # Check if script exists
+    if [ ! -f "$WHATSAPP_AGENT_SCRIPT" ]; then
+        log_warning "WhatsApp agent script not found - skipping"
+        return 1
+    fi
+
+    source "$VENV_DIR/bin/activate"
+    python "$WHATSAPP_AGENT_SCRIPT" >> "$AGENTS_LOG" 2>&1 &
+    WHATSAPP_AGENT_PID=$!
+    deactivate
+
+    sleep 1
+
+    if kill -0 "$WHATSAPP_AGENT_PID" 2>/dev/null; then
+        log_success "WhatsApp agent started (PID: $WHATSAPP_AGENT_PID)"
+        return 0
+    else
+        log_error "Failed to start WhatsApp agent"
+        return 1
+    fi
+}
+
+start_linkedin_agent() {
+    log_agent "Starting LinkedIn agent..."
+
+    # Check if script exists
+    if [ ! -f "$LINKEDIN_AGENT_SCRIPT" ]; then
+        log_warning "LinkedIn agent script not found - skipping"
+        return 1
+    fi
+
+    source "$VENV_DIR/bin/activate"
+    python "$LINKEDIN_AGENT_SCRIPT" >> "$AGENTS_LOG" 2>&1 &
+    LINKEDIN_AGENT_PID=$!
+    deactivate
+
+    sleep 1
+
+    if kill -0 "$LINKEDIN_AGENT_PID" 2>/dev/null; then
+        log_success "LinkedIn agent started (PID: $LINKEDIN_AGENT_PID)"
+        return 0
+    else
+        log_error "Failed to start LinkedIn agent"
         return 1
     fi
 }
@@ -282,13 +348,13 @@ start_memory_agent() {
 monitor_agents() {
     while true; do
         sleep 30
-        
+
         # Check and restart agents if needed
-        for name_pid in "Watcher:WATCHER_PID" "Executor:EXECUTOR_PID" "Planner:PLANNER_PID" "Manager:MANAGER_PID" "Validator:VALIDATOR_PID" "Memory:MEMORY_PID"; do
+        for name_pid in "Watcher:WATCHER_PID" "Executor:EXECUTOR_PID" "Planner:PLANNER_PID" "Manager:MANAGER_PID" "Validator:VALIDATOR_PID" "Memory:MEMORY_PID" "WhatsApp:WHATSAPP_AGENT_PID" "LinkedIn:LINKEDIN_AGENT_PID"; do
             name="${name_pid%%:*}"
             pid_var="${name_pid##*:}"
             pid="${!pid_var}"
-            
+
             if ! kill -0 "$pid" 2>/dev/null; then
                 log_warning "$name agent died unexpectedly, restarting..."
                 case "$name" in
@@ -298,6 +364,8 @@ monitor_agents() {
                     Manager) start_manager_agent ;;
                     Validator) start_validator_agent ;;
                     Memory) start_memory_agent ;;
+                    WhatsApp) start_whatsapp_agent ;;
+                    LinkedIn) start_linkedin_agent ;;
                 esac
             fi
         done
@@ -320,6 +388,8 @@ show_status() {
     log_success "  Manager Agent:       PID $MANAGER_PID"
     log_success "  Validator Agent:     PID $VALIDATOR_PID"
     log_success "  Memory Agent:        PID $MEMORY_PID"
+    log_success "  WhatsApp Agent:      PID $WHATSAPP_AGENT_PID"
+    log_success "  LinkedIn Agent:      PID $LINKEDIN_AGENT_PID"
     log_success ""
     log_info "  Logs: $AGENTS_LOG"
     log_info "  Press Ctrl+C to stop all agents"
@@ -350,16 +420,18 @@ main() {
     # Start all agents
     log_info "Starting Gold Tier agent system..."
     echo ""
-    
+
     start_filesystem_watcher
     start_task_executor
     start_planner_agent
     start_manager_agent
     start_validator_agent
     start_memory_agent
-    
+    start_whatsapp_agent
+    start_linkedin_agent
+
     echo ""
-    
+
     # Show status
     show_status
     

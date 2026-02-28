@@ -401,10 +401,11 @@ import time
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
+    VAULT_PATH = BASE_DIR / "notes"
     agent = ValidatorAgent(
-        needs_action_dir=BASE_DIR / "Needs_Action",
-        done_dir=BASE_DIR / "Done",
+        needs_action_dir=VAULT_PATH / "Needs_Action",
+        done_dir=VAULT_PATH / "Done",
         logs_dir=BASE_DIR / "Logs",
-        dashboard_file=BASE_DIR / "Dashboard.md"
+        dashboard_file=VAULT_PATH / "Dashboard.md"
     )
     agent.run()

@@ -105,11 +105,12 @@ class CEOBriefingAgent:
     CEO Briefing Agent - Executive weekly reporting.
     """
     
-    def __init__(self, base_dir: Path):
+    def __init__(self, base_dir: Path, vault_path: Optional[Path] = None):
         self.base_dir = base_dir
+        self.vault_path = vault_path or (base_dir / "notes")
         self.logs_dir = base_dir / "Logs"
-        self.done_dir = base_dir / "Done"
-        self.business_dir = base_dir / "Domains" / "Business"
+        self.done_dir = self.vault_path / "Done"
+        self.business_dir = self.vault_path / "Domains" / "Business"
         self.accounting_dir = self.logs_dir / "Accounting"
         self.marketing_dir = self.business_dir / "Marketing"
         
@@ -283,10 +284,10 @@ class CEOBriefingAgent:
                             
                 except Exception as e:
                     logger.warning(f"Failed to read {task_file.name}: {e}")
-        
+
         # Also check Needs_Action for pending tasks
         pending = 0
-        needs_action_dir = self.base_dir / "Needs_Action"
+        needs_action_dir = self.vault_path / "Needs_Action"
         if needs_action_dir.exists():
             pending = len(list(needs_action_dir.glob("*.md")))
         
@@ -696,8 +697,8 @@ This week's performance shows:
     def _scan_for_briefing_tasks(self) -> List[Path]:
         """Scan for CEO briefing request tasks."""
         tasks = []
-        needs_action_dir = self.base_dir / "Needs_Action"
-        
+        needs_action_dir = self.vault_path / "Needs_Action"
+
         if not needs_action_dir.exists():
             return tasks
         
@@ -752,7 +753,8 @@ import time
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
-    agent = CEOBriefingAgent(base_dir=BASE_DIR)
+    VAULT_PATH = BASE_DIR / "notes"
+    agent = CEOBriefingAgent(base_dir=BASE_DIR, vault_path=VAULT_PATH)
     
     # Generate briefing on demand
     if len(sys.argv) > 1 and sys.argv[1] == '--generate':

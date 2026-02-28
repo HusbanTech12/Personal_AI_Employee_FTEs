@@ -1,0 +1,29 @@
+{
+  "_comment": "Twilio Configuration for WhatsApp Integration",
+  "_docs": "https://www.twilio.com/docs/whatsapp",
+  "_security": "NEVER commit this file with real credentials. Use environment variables or secrets management.",
+  
+  "account_sid": "",
+  "auth_token": "",
+  "whatsapp_number": "",
+  
+  "_usage": {
+    "account_sid": "Your Twilio Account SID (e.g., ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)",
+    "auth_token": "Your Twilio Auth Token (keep secret)",
+    "whatsapp_number": "Twilio WhatsApp number in E.164 format (e.g., +14155238886)"
+  },
+  
+  "webhook": {
+    "host": "127.0.0.1",
+    "port": 5000,
+    "endpoint": "/whatsapp/webhook"
+  },
+  
+  "settings": {
+    "auto_reply": true,
+    "reply_on_complete": true,
+    "reply_on_failure": true,
+    "max_retries": 3,
+    "retry_delay_seconds": 30
+  }
+}

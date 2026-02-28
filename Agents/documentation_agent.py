@@ -87,13 +87,14 @@ class DocumentationAgent:
     Documentation Agent - Auto-generates system documentation.
     """
     
-    def __init__(self, base_dir: Path):
+    def __init__(self, base_dir: Path, vault_path: Optional[Path] = None):
         self.base_dir = base_dir
+        self.vault_path = vault_path or (base_dir / "notes")
         self.logs_dir = base_dir / "Logs"
         self.audit_dir = base_dir / "Audit"
         self.agents_dir = base_dir / "Agents"
         self.mcp_dir = base_dir / "MCP"
-        self.skills_dir = base_dir / "Skills"
+        self.skills_dir = self.vault_path / "Skills"
         
         # Documentation files
         self.architecture_file = base_dir / "ARCHITECTURE.md"
@@ -748,5 +749,6 @@ Based on accumulated learnings:
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
-    agent = DocumentationAgent(base_dir=BASE_DIR)
+    VAULT_PATH = BASE_DIR / "notes"
+    agent = DocumentationAgent(base_dir=BASE_DIR, vault_path=VAULT_PATH)
     agent.run()

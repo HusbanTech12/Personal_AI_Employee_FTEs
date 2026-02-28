@@ -718,9 +718,10 @@ import time
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
+    VAULT_PATH = BASE_DIR / "notes"
     agent = SocialMediaAgent(
-        needs_action_dir=BASE_DIR / "Needs_Action",
+        needs_action_dir=VAULT_PATH / "Needs_Action",
         logs_dir=BASE_DIR / "Logs",
-        business_dir=BASE_DIR / "Domains" / "Business"
+        business_dir=VAULT_PATH / "Domains" / "Business"
     )
     agent.run()

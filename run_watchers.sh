@@ -135,6 +135,20 @@ check_prerequisites() {
         log_success "All watcher scripts found"
     fi
 
+    # Check WhatsApp watcher dependencies
+    if [ -f "$WATCHERS_DIR/whatsapp_watcher.py" ]; then
+        source "$VENV_DIR/bin/activate" 2>/dev/null || true
+        if ! python -c "import flask" 2>/dev/null; then
+            log_warning "Flask not installed - required for WhatsApp webhook server"
+            log_info "Install with: pip install flask"
+        fi
+        if ! python -c "import twilio" 2>/dev/null; then
+            log_info "Twilio package not installed - WhatsApp will run in demo mode"
+            log_info "Install with: pip install twilio (optional for production)"
+        fi
+        deactivate 2>/dev/null || true
+    fi
+
     # Ensure logs directory exists
     mkdir -p "$LOGS_DIR"
     mkdir -p "$WATCHERS_DIR"

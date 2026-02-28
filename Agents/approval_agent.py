@@ -572,10 +572,11 @@ This task was rejected during the approval process and will not be executed.
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
+    VAULT_PATH = BASE_DIR / "notes"
     agent = ApprovalAgent(
-        needs_action_dir=BASE_DIR / "Needs_Action",
+        needs_action_dir=VAULT_PATH / "Needs_Action",
         needs_approval_dir=BASE_DIR / "Needs_Approval",
         logs_dir=BASE_DIR / "Logs",
-        done_dir=BASE_DIR / "Done"
+        done_dir=VAULT_PATH / "Done"
     )
     agent.run()

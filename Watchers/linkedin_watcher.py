@@ -477,9 +477,13 @@ Best regards
 
 
 if __name__ == "__main__":
-    BASE_DIR = Path(__file__).parent.parent
+    BASE_DIR = Path(__file__).parent.parent.resolve()
+
+    # Centralized vault path - all Obsidian vault folders are relative to this
+    VAULT_PATH = BASE_DIR / "notes"
+
     watcher = LinkedInWatcher(
-        inbox_dir=BASE_DIR / "Inbox",
+        inbox_dir=VAULT_PATH / "Inbox",
         logs_dir=BASE_DIR / "Logs"
     )
     watcher.run()

@@ -36,10 +36,14 @@ from threading import Thread, Event, Lock
 # =============================================================================
 
 BASE_DIR = Path(__file__).parent.resolve()
+
+# Centralized vault path - all Obsidian vault folders are relative to this
+VAULT_PATH = BASE_DIR / "notes"
+
 VENV_DIR = BASE_DIR / "venv"
 LOGS_DIR = BASE_DIR / "Logs"
 WATCHERS_DIR = BASE_DIR / "Watchers"
-DASHBOARD_FILE = BASE_DIR / "Dashboard.md"
+DASHBOARD_FILE = VAULT_PATH / "Dashboard.md"
 
 # Watcher configurations
 WATCHER_CONFIGS = {

@@ -1,0 +1,30 @@
+{
+  "_comment": "LinkedIn API Configuration for LinkedIn Agent",
+  "_docs": "https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/ugc-posts-api",
+  "_security": "NEVER commit this file with real credentials. Use environment variables.",
+  
+  "access_token": "",
+  "org_id": "",
+  "author_urn": "",
+  
+  "_usage": {
+    "access_token": "LinkedIn API access token with w_organization_social permission",
+    "org_id": "Your LinkedIn Organization ID (e.g., 12345678)",
+    "author_urn": "Optional: Full author URN (e.g., urn:li:organization:12345678)"
+  },
+  
+  "_getting_token": {
+    "step1": "Create LinkedIn Developer Account: https://www.linkedin.com/developers/",
+    "step2": "Create an app for your organization",
+    "step3": "Generate access token with 'w_organization_social' permission",
+    "step4": "Get Organization ID from app dashboard"
+  },
+  
+  "settings": {
+    "demo_mode": true,
+    "max_retries": 3,
+    "retry_delay_seconds": 30,
+    "default_visibility": "PUBLIC",
+    "default_tone": "professional"
+  }
+}

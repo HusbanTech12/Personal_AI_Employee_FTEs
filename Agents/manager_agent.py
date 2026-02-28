@@ -691,9 +691,10 @@ import time
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).parent.parent
+    VAULT_PATH = BASE_DIR / "notes"
     agent = ManagerAgent(
-        needs_action_dir=BASE_DIR / "Needs_Action",
-        skills_dir=BASE_DIR / "Skills",
+        needs_action_dir=VAULT_PATH / "Needs_Action",
+        skills_dir=VAULT_PATH / "Skills",
         agents_dir=BASE_DIR / "Agents",
         logs_dir=BASE_DIR / "Logs"
     )

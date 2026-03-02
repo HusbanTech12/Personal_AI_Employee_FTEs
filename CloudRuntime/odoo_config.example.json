@@ -1,0 +1,49 @@
+{
+  "_comment": "Odoo Community Configuration - PLATINUM Tier",
+  "_warning": "NEVER commit this file with real credentials to version control",
+  "_gitignore": "Add to .gitignore_platinum or rename to odoo_config.json (which is ignored)",
+  
+  "url": "http://localhost:8069",
+  "database": "odoo",
+  "username": "admin",
+  "password": "YOUR_PASSWORD_HERE",
+  "company_id": 1,
+  
+  "_notes": {
+    "url": "Odoo Community server URL (XML-RPC endpoint)",
+    "database": "Odoo database name",
+    "username": "Odoo username (typically 'admin')",
+    "password": "Odoo user password",
+    "company_id": "Default company ID for multi-company setups"
+  },
+  
+  "_security": {
+    "recommendation": "Use environment variables for production",
+    "env_example": {
+      "ODOO_URL": "http://your-vm-ip:8069",
+      "ODOO_DATABASE": "odoo",
+      "ODOO_USERNAME": "admin",
+      "ODOO_PASSWORD": "secure_password"
+    }
+  },
+  
+  "_cloud_restrictions": {
+    "cloud_can": [
+      "create_draft_invoice",
+      "read_balance", 
+      "generate_report",
+      "list_partners",
+      "list_products"
+    ],
+    "cloud_cannot": [
+      "post_invoice",
+      "approve_and_post",
+      "cancel_invoice",
+      "finalize_accounting"
+    ],
+    "local_only": [
+      "Invoice posting requires approval",
+      "All final accounting actions"
+    ]
+  }
+}

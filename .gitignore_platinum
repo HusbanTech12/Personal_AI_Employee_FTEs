@@ -1,0 +1,426 @@
+# =============================================================================
+# PLATINUM Tier - Secure Vault Synchronization Ignore Rules
+# =============================================================================
+# This file defines what should NEVER be synced or committed to version control.
+# Designed for secure cloud/local vault synchronization.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# SECRETS & CREDENTIALS (CRITICAL - NEVER SYNC)
+# -----------------------------------------------------------------------------
+
+# Environment files with secrets
+.env
+.env.*
+.env.local
+.env.production
+.env.development
+*.env
+
+# API Keys & Tokens
+*.key
+*.keys
+*.pem
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*keystore*
+
+# Credential files
+*credentials*
+*credential*
+*auth_token*
+*access_token*
+*refresh_token*
+*api_key*
+*apikey*
+*secret*
+*password*
+*passwd*
+
+# Token directories
+tokens/
+token/
+secrets/
+secret/
+credentials/
+credential/
+
+# -----------------------------------------------------------------------------
+# SESSION DATA (NEVER SYNC)
+# -----------------------------------------------------------------------------
+
+# Session files
+*.session
+*.sessions
+session/
+sessions/
+*session_id*
+*session_token*
+
+# Cache with session data
+*.cache
+cache/
+.cache/
+
+# Temporary auth files
+*.tmp_auth
+*.temp_auth
+
+# -----------------------------------------------------------------------------
+# CONFIGURATION WITH SECRETS
+# -----------------------------------------------------------------------------
+
+# Config files that may contain secrets
+config_secrets.json
+secrets.json
+secrets.yaml
+secrets.yml
+private_config.json
+private_config.yaml
+*.secret.json
+*.secret.yaml
+*.secret.yml
+
+# MCP configurations with API keys
+MCP/*_config.json
+!MCP/README.md
+MCP/*.secret.json
+
+# Cloud runtime secrets
+CloudRuntime/cloud_config_secrets.json
+CloudRuntime/*_secrets.json
+
+# -----------------------------------------------------------------------------
+# LOG FILES WITH SENSITIVE DATA
+# -----------------------------------------------------------------------------
+
+# Logs may contain tokens, keys, PII
+Logs/*.log
+logs/*.log
+*.log
+
+# Debug logs
+debug.log
+debug_*.log
+trace.log
+
+# Audit logs with sensitive operations
+Audit/*.md
+audit/*.md
+
+# -----------------------------------------------------------------------------
+# DATABASE & STORAGE
+# -----------------------------------------------------------------------------
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Database dumps
+*.sql
+*.dump
+
+# Data files
+data/
+*.data
+*.dat
+
+# -----------------------------------------------------------------------------
+# OBSIDIAN VAULT SPECIFIC
+# -----------------------------------------------------------------------------
+
+# Obsidian config with potential secrets
+notes/.obsidian/plugins/*/data.json
+notes/.obsidian/app.json
+notes/.obsidian/appearance.json
+notes/.obsidian/core-plugins.json
+notes/.obsidian/workspace.json
+notes/.obsidian/workspace-*.json
+notes/.obsidian/graph.json
+notes/.obsidian/types.json
+
+# Obsidian sync conflicts
+*.conflict
+*.conflicted copy
+
+# -----------------------------------------------------------------------------
+# PYTHON / VIRTUAL ENVIRONMENT
+# -----------------------------------------------------------------------------
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# -----------------------------------------------------------------------------
+# NODE / NPM
+# -----------------------------------------------------------------------------
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# -----------------------------------------------------------------------------
+# SYSTEM FILES
+# -----------------------------------------------------------------------------
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.Trash-*
+.nfs*
+
+# -----------------------------------------------------------------------------
+# BACKUP FILES
+# -----------------------------------------------------------------------------
+
+*.bak
+*.backup
+*.old
+*.orig
+backup/
+backups/
+
+# -----------------------------------------------------------------------------
+# SYNC STATE (LOCAL ONLY)
+# -----------------------------------------------------------------------------
+
+# Delegation state
+CloudRuntime/delegation_state/claim_registry.json
+
+# Sync state
+CloudRuntime/sync_state/
+CloudRuntime/sync_conflicts/
+
+# Health reports (may contain sensitive info)
+CloudRuntime/health_reports/
+
+# Violations (may contain sensitive info)
+CloudRuntime/violations/
+
+# -----------------------------------------------------------------------------
+# DRAFTS & APPROVALS (IN-PROGRESS)
+# -----------------------------------------------------------------------------
+
+# Drafts being worked on
+notes/Drafts/*.md
+
+# Pending approvals
+notes/Approval_Requests/*.md
+
+# In-progress tasks
+notes/In_Progress/*/
+
+# -----------------------------------------------------------------------------
+# WATCHER STATE
+# -----------------------------------------------------------------------------
+
+Watchers/*.state
+Watchers/*.pid
+Watchers/*.lock
+
+# Gmail watcher secrets
+Watchers/gmail_credentials.json
+Watchers/gmail_token.json
+
+# WhatsApp session
+Watchers/whatsapp_session/
+Watchers/whatsapp_session.json
+
+# LinkedIn session
+Watchers/linkedin_session.json
+Watchers/linkedin_cookies.json
+
+# -----------------------------------------------------------------------------
+# TWILIO / WEBHOOK SECRETS
+# -----------------------------------------------------------------------------
+
+Config/twilio_config.json
+Config/webhook_secrets.json
+*twilio*secret*
+*webhook*secret*
+
+# -----------------------------------------------------------------------------
+# ENCRYPTED FILES (KEYS NOT SYNCED)
+# -----------------------------------------------------------------------------
+
+*.gpg
+*.pgp
+*.enc
+*.encrypted
+
+# GPG keyrings
+*.gpg~
+*.pgp~
+
+# -----------------------------------------------------------------------------
+# GIT
+# -----------------------------------------------------------------------------
+
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# Git secrets
+.git-secrets/
+secrets/
+
+# -----------------------------------------------------------------------------
+# DOCKER
+# -----------------------------------------------------------------------------
+
+.docker/
+docker-compose.override.yml
+.env.docker
+
+# -----------------------------------------------------------------------------
+# KUBERNETES SECRETS
+# -----------------------------------------------------------------------------
+
+*k8s*secret*
+*kubernetes*secret*
+secrets.yaml
+secrets.yml
+
+# -----------------------------------------------------------------------------
+# TERRAFORM
+# -----------------------------------------------------------------------------
+
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform/
+.terraform.lock.hcl
+
+# -----------------------------------------------------------------------------
+# ANSIBLE
+# -----------------------------------------------------------------------------
+
+*.vault
+vault_password
+.vault_pass
+
+# -----------------------------------------------------------------------------
+# CLOUD PROVIDER CREDENTIALS
+# -----------------------------------------------------------------------------
+
+# AWS
+.aws/credentials
+.aws/config
+*.aws_credentials
+
+# Google Cloud
+gcloud/
+*.gcloud_credentials
+service-account*.json
+*-service-account.json
+
+# Azure
+.azure/
+*.azure_credentials
+
+# -----------------------------------------------------------------------------
+# SSH KEYS
+# -----------------------------------------------------------------------------
+
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+id_ecdsa
+id_ecdsa.pub
+*.ppk
+*.pub
+
+# -----------------------------------------------------------------------------
+# CERTIFICATES
+# -----------------------------------------------------------------------------
+
+ssl/
+certs/
+private/
+*.crt
+*.pem
+*.key
+
+# -----------------------------------------------------------------------------
+# MISC SECRETS
+# -----------------------------------------------------------------------------
+
+htpasswd
+.htpasswd
+.netrc
+.npmrc
+.pypirc
+.docker/config.json
+
+# -----------------------------------------------------------------------------
+# ENCRYPTION KEYS
+# -----------------------------------------------------------------------------
+
+master.key
+master_key
+encryption_key
+*.master_key
+
+# -----------------------------------------------------------------------------
+# JOURNAL / PERSONAL (OPTIONAL)
+# -----------------------------------------------------------------------------
+
+# Personal notes that shouldn't sync
+notes/Personal/private/
+notes/Personal/journal/
+notes/Personal/diary/
+
+# -----------------------------------------------------------------------------
+# END OF PLATINUM TIER IGNORE RULES
+# -----------------------------------------------------------------------------

@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Optional, Dict, Set
 from flask import Flask, request, jsonify
 from twilio.twiml.messaging_response import MessagingResponse
+from dotenv import load_dotenv
 
 # =============================================================================
 # Configuration
@@ -50,6 +51,15 @@ CONFIG_DIR = BASE_DIR / "Config"
 INBOX_DIR = VAULT_PATH / "Inbox"
 LOGS_DIR = BASE_DIR / "Logs"
 CONFIG_FILE = CONFIG_DIR / "twilio_config.json"
+ENV_FILE = BASE_DIR / ".env"
+
+# Load from .env first (primary source for official accounts)
+if ENV_FILE.exists():
+    load_dotenv(dotenv_path=ENV_FILE)
+
+# Load Twilio config
+if CONFIG_FILE.exists():
+    load_dotenv(dotenv_path=CONFIG_FILE, override=False)
 
 # Logging configuration
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -138,6 +148,41 @@ class WhatsAppTaskCreator:
         self.inbox_dir = inbox_dir
         self.inbox_dir.mkdir(parents=True, exist_ok=True)
         self.processed_messages: Set[str] = set()
+
+        # Official Accounts Filtering - ONLY these numbers are accepted
+        self.OFFICIAL_FILTER_ENABLED = os.getenv("OFFICIAL_ACCOUNTS_FILTER_ENABLED", "true").lower() == "true"
+        self.WHATSAPP_OFFICIAL_NUMBERS = [c.strip().lower() for c in os.getenv("WHATSAPP_OFFICIAL_NUMBERS", "").split(",") if c.strip() and c.strip().upper() != "NONE"]
+        self.LOG_IGNORED_MESSAGES = os.getenv("LOG_IGNORED_MESSAGES", "true").lower() == "true"
+        self.REJECT_NON_OFFICIAL = os.getenv("REJECT_NON_OFFICIAL", "true").lower() == "true"
+
+    def is_official_account(self, sender: str) -> bool:
+        """
+        Check if sender number is an official account.
+        Returns True if OFFICIAL_FILTER_ENABLED is False or sender matches an official number.
+        """
+        if not self.OFFICIAL_FILTER_ENABLED:
+            return True
+
+        if not self.WHATSAPP_OFFICIAL_NUMBERS:
+            logger.warning("[WHATSAPP] Official numbers filter enabled but no numbers configured - REJECTING ALL")
+            return False
+
+        sender_clean = sender.lower().strip()
+        # Remove 'whatsapp:' prefix if present
+        if sender_clean.startswith('whatsapp:'):
+            sender_clean = sender_clean[9:]
+
+        # Check for exact match or partial match
+        for official in self.WHATSAPP_OFFICIAL_NUMBERS:
+            if official in sender_clean or sender_clean in official:
+                return True
+
+        # Log ignored message
+        if self.LOG_IGNORED_MESSAGES:
+            logger.info(f"[WHATSAPP] ⚠️  IGNORED non-official account: {sender}")
+            logger.info(f"[WHATSAPP]   Official numbers: {self.WHATSAPP_OFFICIAL_NUMBERS}")
+
+        return False
 
     def determine_priority(self, message: str) -> str:
         """Determine task priority based on message content."""
@@ -315,6 +360,14 @@ class WhatsAppWebhookServer:
                 message_sid = request.form.get('MessageSid', '')
                 timestamp = request.form.get('Timestamp', datetime.now().isoformat())
 
+                # OFFICIAL ACCOUNTS FILTER: Check if sender is official
+                if not self.task_creator.is_official_account(from_number):
+                    if self.task_creator.REJECT_NON_OFFICIAL:
+                        logger.info(f"[WHATSAPP] ✗ REJECTED non-official account: {from_number}")
+                        # Return empty response - don't create task
+                        resp = MessagingResponse()
+                        return str(resp)
+
                 # Log incoming message
                 logger.info(f"Message from: {from_number}")
                 logger.info(f"Message body: {body[:100]}...")
@@ -330,6 +383,7 @@ class WhatsAppWebhookServer:
                 task_path = self.task_creator.save_task(task_content, filename)
 
                 logger.info(f"Task created: {task_path}")
+                logger.info(f"[WHATSAPP] ✓ Official account message processed from: {from_number}")
 
                 # Return Twilio response (empty - we just acknowledge)
                 resp = MessagingResponse()
@@ -429,18 +483,10 @@ class DemoModeHandler:
         return random.choice(demo_messages)
 
     def process_demo_message(self):
-        """Process a demo message."""
-        demo = self.generate_demo_message()
-
-        task_content, filename = self.task_creator.create_task_markdown(
-            sender=demo['from'],
-            message=demo['body'],
-            timestamp=demo['timestamp'],
-            message_sid=f"demo_{datetime.now().timestamp()}"
-        )
-
-        self.task_creator.save_task(task_content, filename)
-        logger.info(f"Demo message processed from: {demo['from']}")
+        """Process a demo message - DISABLED for production."""
+        # Demo mode disabled - only official accounts
+        logger.debug("[WHATSAPP] Demo mode DISABLED - no demo messages generated")
+        return
 
 
 # =============================================================================

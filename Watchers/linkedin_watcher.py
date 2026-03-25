@@ -40,13 +40,15 @@ from dotenv import load_dotenv
 # Load credentials from Config/credentials.env
 BASE_DIR = Path(__file__).parent.parent.resolve()
 CREDENTIALS_FILE = BASE_DIR / "Config" / "credentials.env"
+ENV_FILE = BASE_DIR / ".env"
 
-# Load environment variables from credentials file
+# Load environment variables from .env first (primary source)
+if ENV_FILE.exists():
+    load_dotenv(dotenv_path=ENV_FILE)
+
+# Then load credentials file (for sensitive data)
 if CREDENTIALS_FILE.exists():
-    load_dotenv(dotenv_path=CREDENTIALS_FILE)
-else:
-    # Fallback to system environment variables
-    pass
+    load_dotenv(dotenv_path=CREDENTIALS_FILE, override=False)
 
 # Configure logging
 logging.basicConfig(
@@ -65,6 +67,8 @@ class LinkedInWatcher:
 
     Monitors LinkedIn activity and converts notifications/messages to markdown tasks.
     Uses file-based input for demo (can be extended to use LinkedIn API).
+
+    CLIENT FILTER: Only processes messages from configured clients.
     """
 
     # Configuration - Loaded securely from credentials.env
@@ -72,6 +76,15 @@ class LinkedInWatcher:
     LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD", "")
     LINKEDIN_API_KEY = os.getenv("LINKEDIN_API_KEY", "")
     LINKEDIN_API_SECRET = os.getenv("LINKEDIN_API_SECRET", "")
+
+    # Official Accounts Filtering - ONLY these senders are accepted
+    OFFICIAL_FILTER_ENABLED = os.getenv("OFFICIAL_ACCOUNTS_FILTER_ENABLED", "true").lower() == "true"
+    LINKEDIN_OFFICIAL_ACCOUNTS = [c.strip().lower() for c in os.getenv("LINKEDIN_OFFICIAL_ACCOUNTS", "").split(",") if c.strip() and c.strip().upper() != "NONE"]
+    LOG_IGNORED_MESSAGES = os.getenv("LOG_IGNORED_MESSAGES", "true").lower() == "true"
+    REJECT_NON_OFFICIAL = os.getenv("REJECT_NON_OFFICIAL", "true").lower() == "true"
+
+    # Demo mode - DISABLED for production
+    DEMO_MODE_ENABLED = os.getenv("DEMO_MODE_ENABLED", "false").lower() == "true"
 
     # Polling interval in seconds
     POLL_INTERVAL = 30
@@ -109,6 +122,32 @@ class LinkedInWatcher:
 
         logger.warning("[LINKEDIN] No credentials configured - running in file-based demo mode")
         logger.warning("[LINKEDIN] System will continue but LinkedIn API is disabled")
+        return False
+
+    def is_official_account(self, sender: str) -> bool:
+        """
+        Check if sender is an official account.
+        Returns True if OFFICIAL_FILTER_ENABLED is False or sender matches an official account.
+        """
+        if not self.OFFICIAL_FILTER_ENABLED:
+            return True
+
+        if not self.LINKEDIN_OFFICIAL_ACCOUNTS:
+            logger.warning("[LINKEDIN] Official accounts filter enabled but no accounts configured - REJECTING ALL")
+            return False
+
+        sender_lower = sender.lower().strip()
+
+        # Check for exact match or substring match
+        for official in self.LINKEDIN_OFFICIAL_ACCOUNTS:
+            if official in sender_lower or sender_lower in official:
+                return True
+
+        # Log ignored message
+        if self.LOG_IGNORED_MESSAGES:
+            logger.info(f"[LINKEDIN] ⚠️  IGNORED non-official account: {sender}")
+            logger.info(f"[LINKEDIN]   Official accounts: {self.LINKEDIN_OFFICIAL_ACCOUNTS}")
+
         return False
 
     def connect_to_linkedin(self) -> bool:
@@ -329,17 +368,30 @@ Best regards
             logger.error(f"Failed to parse notification file {file_path}: {e}")
             return None
     
-    def process_notification(self, notification_data: Dict):
-        """Process a single notification and create task."""
+    def process_notification(self, notification_data: Dict) -> bool:
+        """
+        Process a single notification and create task.
+        Returns True if processed, False if ignored (non-official).
+        """
+        sender = notification_data['sender']
+
+        # OFFICIAL ACCOUNTS FILTER: Check if sender is official
+        if not self.is_official_account(sender):
+            if self.REJECT_NON_OFFICIAL:
+                logger.info(f"[LINKEDIN] ✗ REJECTED: {notification_data['type']} from {sender}")
+                return False
+
         task_content, filename = self.create_task_markdown(
-            sender=notification_data['sender'],
+            sender=sender,
             notification_type=notification_data['type'],
             content=notification_data['content'],
             timestamp=notification_data['timestamp'],
             profile_url=notification_data.get('profile_url')
         )
-        
+
         self.save_task(task_content, filename)
+        logger.info(f"[LINKEDIN] ✓ Official account message processed: {notification_data['type']} from {sender}")
+        return True
     
     def scan_input_directory(self) -> List[Path]:
         """Scan input directory for new notification files."""
@@ -404,14 +456,21 @@ Best regards
         return random.choice(demo_notifications)
     
     def run_demo_mode(self):
-        """Run in demo mode generating sample notifications."""
+        """Run in demo mode generating sample notifications - DISABLED for production."""
+        if not self.DEMO_MODE_ENABLED:
+            logger.debug("[LINKEDIN] Demo mode DISABLED - no demo notifications generated")
+            return
+
         logger.info("Running in DEMO mode - generating sample LinkedIn notifications")
-        
+
         # Generate and process demo notification
         demo_notification = self.generate_demo_notification()
-        self.process_notification(demo_notification)
-        
-        logger.info(f"Demo notification processed: {demo_notification['type']} from {demo_notification['sender']}")
+        result = self.process_notification(demo_notification)
+
+        if result:
+            logger.info(f"Demo notification processed: {demo_notification['type']} from {demo_notification['sender']}")
+        else:
+            logger.info(f"Demo notification ignored (non-official): {demo_notification['sender']}")
     
     def run(self):
         """Main watcher loop."""
@@ -459,9 +518,9 @@ Best regards
                 if notification_files:
                     logger.info(f"Processed {len(notification_files)} notification(s)")
 
-                # Generate demo notifications periodically (for demonstration)
+                # Generate demo notifications periodically (for demonstration) - DISABLED
                 demo_count += 1
-                if demo_count >= 3:  # Every 3 polls
+                if self.DEMO_MODE_ENABLED and demo_count >= 3:  # Every 3 polls
                     self.run_demo_mode()
                     demo_count = 0
 

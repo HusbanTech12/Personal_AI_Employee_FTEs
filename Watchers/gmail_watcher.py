@@ -43,13 +43,15 @@ BASE_DIR = Path(__file__).parent.parent.resolve()
 VAULT_PATH = BASE_DIR / "notes"
 
 CREDENTIALS_FILE = BASE_DIR / "Config" / "credentials.env"
+ENV_FILE = BASE_DIR / ".env"
 
-# Load environment variables from credentials file
+# Load from .env first (primary source for official accounts)
+if ENV_FILE.exists():
+    load_dotenv(dotenv_path=ENV_FILE)
+
+# Load credentials file (for sensitive data)
 if CREDENTIALS_FILE.exists():
-    load_dotenv(dotenv_path=CREDENTIALS_FILE)
-else:
-    # Fallback to system environment variables
-    pass
+    load_dotenv(dotenv_path=CREDENTIALS_FILE, override=False)
 
 # Configure logging
 logging.basicConfig(
@@ -67,6 +69,8 @@ class GmailWatcher:
     Gmail Watcher for AI Employee Vault.
 
     Monitors Gmail inbox and converts emails to markdown tasks.
+
+    CLIENT FILTER: Only processes emails from configured clients.
     """
 
     # Configuration - Loaded securely from credentials.env
@@ -74,6 +78,12 @@ class GmailWatcher:
     IMAP_PORT = int(os.getenv("GMAIL_IMAP_PORT", "993"))
     EMAIL_USER = os.getenv("GMAIL_ADDRESS", "")
     EMAIL_PASSWORD = os.getenv("GMAIL_PASSWORD", "")  # Use App Password
+
+    # Official Accounts Filtering - ONLY these senders are accepted
+    OFFICIAL_FILTER_ENABLED = os.getenv("OFFICIAL_ACCOUNTS_FILTER_ENABLED", "true").lower() == "true"
+    GMAIL_OFFICIAL_ACCOUNTS = [c.strip().lower() for c in os.getenv("GMAIL_OFFICIAL_ACCOUNTS", "").split(",") if c.strip() and c.strip().upper() != "NONE"]
+    LOG_IGNORED_MESSAGES = os.getenv("LOG_IGNORED_MESSAGES", "true").lower() == "true"
+    REJECT_NON_OFFICIAL = os.getenv("REJECT_NON_OFFICIAL", "true").lower() == "true"
 
     # Polling interval in seconds
     POLL_INTERVAL = 30
@@ -112,6 +122,45 @@ class GmailWatcher:
 
         logger.info("[GMAIL] Credentials validated successfully")
         return True
+
+    def is_official_account(self, sender: str) -> bool:
+        """
+        Check if sender email is an official account.
+        Returns True if OFFICIAL_FILTER_ENABLED is False or sender matches an official account.
+        Supports domain matching (e.g., @husbantech.com matches all emails from that domain).
+        """
+        if not self.OFFICIAL_FILTER_ENABLED:
+            return True
+
+        if not self.GMAIL_OFFICIAL_ACCOUNTS:
+            logger.warning("[GMAIL] Official accounts filter enabled but no accounts configured - REJECTING ALL")
+            return False
+
+        sender_lower = sender.lower().strip()
+
+        # Extract email address from "Name <email@domain.com>" format
+        email_match = re.search(r'<([^>]+)>', sender_lower)
+        if email_match:
+            sender_email = email_match.group(1)
+        else:
+            sender_email = sender_lower
+
+        # Check for exact match or domain match
+        for official in self.GMAIL_OFFICIAL_ACCOUNTS:
+            # Domain match (starts with @)
+            if official.startswith('@'):
+                if official in sender_email:
+                    return True
+            # Exact email match
+            elif official == sender_email or official in sender_lower:
+                return True
+
+        # Log ignored message
+        if self.LOG_IGNORED_MESSAGES:
+            logger.info(f"[GMAIL] ⚠️  IGNORED non-official account: {sender}")
+            logger.info(f"[GMAIL]   Official accounts: {self.GMAIL_OFFICIAL_ACCOUNTS}")
+
+        return False
 
     def connect_to_gmail(self) -> Optional[imaplib.IMAP4_SSL]:
         """Connect to Gmail IMAP server."""
@@ -463,8 +512,17 @@ This is an automated alert.''',
         demo['id'] = f"demo_{datetime.now().timestamp()}"
         return demo
     
-    def process_email(self, email_data: Dict):
-        """Process a single email and create task."""
+    def process_email(self, email_data: Dict) -> bool:
+        """
+        Process a single email and create task.
+        Returns True if processed, False if ignored (non-official).
+        """
+        # OFFICIAL ACCOUNTS FILTER: Check if sender is official
+        if not self.is_official_account(email_data['sender']):
+            if self.REJECT_NON_OFFICIAL:
+                logger.info(f"[GMAIL] ✗ REJECTED non-official account: {email_data['sender']}")
+                return False
+
         task_content, filename = self.create_task_markdown(
             subject=email_data['subject'],
             sender=email_data['sender'],
@@ -472,18 +530,15 @@ This is an automated alert.''',
             received_date=email_data['received'],
             action_items=email_data['action_items']
         )
-        
+
         self.save_task(task_content, filename)
+        logger.info(f"[GMAIL] ✓ Official account email processed: {email_data['subject']} from {email_data['sender']}")
+        return True
     
     def run_demo_mode(self):
-        """Run in demo mode without Gmail connection."""
-        logger.info("Running in DEMO mode - generating sample emails")
-        
-        # Generate demo email
-        demo_email = self.generate_demo_email()
-        self.process_email(demo_email)
-        
-        logger.info(f"Demo email processed: {demo_email['subject']}")
+        """Run in demo mode without Gmail connection - DISABLED for production."""
+        logger.debug("[GMAIL] Demo mode DISABLED - no demo emails generated")
+        return
     
     def run(self):
         """Main watcher loop."""
@@ -509,11 +564,13 @@ This is an automated alert.''',
                     # Fetch and process new emails
                     new_emails = self.fetch_new_emails(mail)
 
+                    processed_count = 0
                     for email_data in new_emails:
-                        self.process_email(email_data)
+                        if self.process_email(email_data):
+                            processed_count += 1
 
-                    if new_emails:
-                        logger.info(f"Processed {len(new_emails)} new email(s)")
+                    if processed_count > 0:
+                        logger.info(f"Processed {processed_count} client email(s)")
 
                     # Close connection
                     mail.close()

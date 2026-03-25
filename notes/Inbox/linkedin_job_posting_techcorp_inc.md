@@ -2,7 +2,7 @@
 title: LinkedIn: Job_Posting from TechCorp Inc.
 status: needs_action
 priority: high
-created: 2026-02-28 23:19:40
+created: 2026-03-25 22:42:11
 skill: task_processor
 source: LinkedIn
 sender: TechCorp Inc.
@@ -13,7 +13,7 @@ notification_type: job_posting
 
 **From:** TechCorp Inc.
 
-**Received:** 2026-02-28 23:19:40
+**Received:** 2026-03-25 22:42:11
 
 **Source:** LinkedIn
 

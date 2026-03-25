@@ -1,0 +1,118 @@
+---
+title: LinkedIn Response - Jennifer Lee
+status: pending_approval
+priority: medium
+created: 2026-03-25 22:00:57
+source: LinkedIn
+original_sender: Jennifer Lee
+response_type: recommendation_response
+---
+
+# LinkedIn Response Draft
+
+**To:** Jennifer Lee
+**Generated:** 2026-03-25 22:00:57
+**Type:** recommendation Response
+
+---
+
+## Generated Response
+
+Hi Jennifer Lee,
+
+Thank you for reaching out on LinkedIn. I appreciate you taking the time to connect.
+
+I'd be happy to learn more about your work and explore potential synergies between our professional networks.
+
+Best regards,
+AI Employee Vault
+
+---
+
+## Original Message
+
+---
+title: LinkedIn: Recommendation from Jennifer Lee
+status: needs_action
+priority: medium
+created: 2026-03-25 21:57:09
+skill: task_processor
+source: LinkedIn
+sender: Jennifer Lee
+notification_type: recommendation
+---
+
+# LinkedIn Notification Task
+
+**From:** Jennifer Lee
+
+**Received:** 2026-03-25 21:57:09
+
+**Source:** LinkedIn
+
+**Type:** Recommendation
+
+**Profile:** https://linkedin.com/in/jenniferlee
+
+**Priority:** Medium
+
+---
+
+## Notification Content
+
+Jennifer Lee is requesting a recommendation. You worked together at ABC Company from 2020-2022.
+
+---
+
+## Action Items
+
+- [ ] Review recommendation request from Jennifer Lee
+- [ ] Write recommendation
+
+---
+
+## Guidance
+
+Only write recommendations for people you know well. Be specific and genuine.
+
+---
+
+## Response Templates
+
+### Connection Acceptance
+```
+Hi Jennifer,
+
+Thanks for connecting! I'd love to learn more about your work at [Company].
+
+Best regards
+```
+
+### Message Response
+```
+Hi Jennifer,
+
+Thank you for reaching out. I appreciate you thinking of me.
+
+[Your response here]
+
+Best regards
+```
+
+---
+
+## Notes
+
+- Automatically imported from LinkedIn
+- Consider responding via LinkedIn for context and networking
+- Priority auto-assigned based on notification type
+- Professional response recommended
+
+
+---
+
+## Approval Required
+
+- [ ] Review response for accuracy
+- [ ] Verify sender information
+- [ ] Approve for sending via LinkedIn API
